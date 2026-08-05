@@ -18,3 +18,6 @@ dist/
 build/
 *.log
 node_modules/
+
+# Artefatto generato da `az bicep build`: la fonte di verità è main.bicep
+infra/main.json
