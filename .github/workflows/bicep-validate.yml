@@ -1,0 +1,35 @@
+name: Bicep validate
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/bicep-validate.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'infra/**'
+      - '.github/workflows/bicep-validate.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: az bicep build
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # Azure CLI è preinstallata sui runner ubuntu-latest: serve solo il modulo bicep.
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      - name: Show Bicep version
+        run: az bicep version
+
+      # Fallisce con exit code != 0 se il template non compila.
+      - name: Build template
+        run: az bicep build --file infra/main.bicep
