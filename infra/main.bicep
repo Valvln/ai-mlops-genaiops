@@ -1,4 +1,5 @@
 param location string = 'westeurope'
+param location string = 'northeurope'
 param storageAccountName string = 'ai300storage${uniqueString(resourceGroup().id)}'
 param keyVaultName string = 'ai300kv${uniqueString(resourceGroup().id)}'
 
