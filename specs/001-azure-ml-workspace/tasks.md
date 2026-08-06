@@ -53,7 +53,7 @@ Two honest notes, so the structure below is not misread:
 **Purpose**: Record the "before" state so every later count is a comparison, not
 an assertion in a vacuum.
 
-- [ ] T001 Run `az bicep build --file infra/main.bicep` from the repo root and
+- [X] T001 Run `az bicep build --file infra/main.bicep` from the repo root and
       confirm it exits 0 with no output; record that `infra/main.json` contains
       exactly 2 resources and 2 outputs, using the `jq` commands in
       [quickstart.md](./quickstart.md)
@@ -68,12 +68,12 @@ an assertion in a vacuum.
 
 **⚠️ CRITICAL**: T002 blocks all user story work.
 
-- [ ] T002 Add the `workspaceName` parameter to `infra/main.bicep`, defaulting
+- [X] T002 Add the `workspaceName` parameter to `infra/main.bicep`, defaulting
       to `'ai300ml${uniqueString(resourceGroup().id)}'`, placed alongside the
       existing `storageAccountName` and `keyVaultName` parameters and following
       their exact style (see the parameters table in [the interface
       contract](./contracts/template-interface.md))
-- [ ] T003 Rebuild and confirm the build is still clean and the resource count
+- [X] T003 Rebuild and confirm the build is still clean and the resource count
       is still 2 — a parameter alone declares nothing
 
 **Checkpoint**: Parameter surface extended, no resource change yet.
@@ -92,24 +92,24 @@ expressed as ARM `resourceId(...)` expressions rather than literal ids.
 
 ### Implementation for User Story 1
 
-- [ ] T004 [US1] Add the Log Analytics workspace resource to `infra/main.bicep`
+- [X] T004 [US1] Add the Log Analytics workspace resource to `infra/main.bicep`
       using API version `2025-07-01` (see [research.md](./research.md) R3 for
       why this is not the newest GA version), with `sku.name: 'PerGB2018'`,
       `retentionInDays: 30`, a name derived from
       `uniqueString(resourceGroup().id)`, and the standard project tags
-- [ ] T005 [US1] Add the Application Insights component to `infra/main.bicep`
+- [X] T005 [US1] Add the Application Insights component to `infra/main.bicep`
       using API version `2020-02-02`, with the `kind` and `Application_Type`
       both set to `web`, `IngestionMode` set to `LogAnalytics`, and
       `WorkspaceResourceId` referencing the Log Analytics resource added in
       T004 (depends on T004)
-- [ ] T006 [US1] Add the machine learning workspace to `infra/main.bicep` using
+- [X] T006 [US1] Add the machine learning workspace to `infra/main.bicep` using
       API version `2026-05-01`, named from the `workspaceName` parameter, with
       `properties.storageAccount`, `properties.keyVault`, and
       `properties.applicationInsights` referencing the existing
       `storageAccount`, the existing `kv`, and the component from T005 by
       symbolic `.id` — and with **no `containerRegistry` property written at
       all** (depends on T005)
-- [ ] T007 [US1] Rebuild and confirm: exit 0, **no output whatsoever** (a
+- [X] T007 [US1] Rebuild and confirm: exit 0, **no output whatsoever** (a
       `BCP081` warning here means a wrong API version), 5 resources, and the
       type list matches the order in [quickstart.md](./quickstart.md)
 
@@ -128,18 +128,18 @@ no compute resource of any type, entry-level SKU, consumption-based telemetry.
 
 ### Implementation for User Story 2
 
-- [ ] T008 [US2] Add `sku: { name: 'Basic', tier: 'Basic' }` to the machine
+- [X] T008 [US2] Add `sku: { name: 'Basic', tier: 'Basic' }` to the machine
       learning workspace in `infra/main.bicep` (depends on T006)
-- [ ] T009 [P] [US2] Assert absence of a container registry: grep
+- [X] T009 [P] [US2] Assert absence of a container registry: grep
       `infra/main.json` for `containerRegistry` and confirm zero matches
       (SC-003)
-- [ ] T010 [P] [US2] Assert no compute was declared: confirm no resource type in
+- [X] T010 [P] [US2] Assert no compute was declared: confirm no resource type in
       `infra/main.json` contains `computes`, `computeInstance`, or
       `computeCluster` (FR-008)
-- [ ] T011 [P] [US2] Assert the telemetry resources are consumption-billed: Log
+- [X] T011 [P] [US2] Assert the telemetry resources are consumption-billed: Log
       Analytics `sku.name` is `PerGB2018` and `retentionInDays` is `30`
       (FR-004a)
-- [ ] T012 [US2] Rebuild and confirm the SKU landed: the workspace's `sku` in
+- [X] T012 [US2] Rebuild and confirm the SKU landed: the workspace's `sku` in
       `infra/main.json` is `{"name": "Basic", "tier": "Basic"}` — exact command
       under "FR-006 — Basic SKU" in [quickstart.md](./quickstart.md) (FR-006)
 
@@ -158,9 +158,9 @@ of `SystemAssigned`.
 
 ### Implementation for User Story 3
 
-- [ ] T013 [US3] Add `identity: { type: 'SystemAssigned' }` to the machine
+- [X] T013 [US3] Add `identity: { type: 'SystemAssigned' }` to the machine
       learning workspace in `infra/main.bicep` (depends on T006)
-- [ ] T014 [US3] Rebuild and assert the workspace's `identity.type` in
+- [X] T014 [US3] Rebuild and assert the workspace's `identity.type` in
       `infra/main.json` is `SystemAssigned` — exact command under "FR-005" in
       [quickstart.md](./quickstart.md) (FR-005)
 
@@ -178,10 +178,10 @@ and its full resource id.
 
 ### Implementation for User Story 4
 
-- [ ] T015 [US4] Append `workspaceName` and `workspaceId` outputs to
+- [X] T015 [US4] Append `workspaceName` and `workspaceId` outputs to
       `infra/main.bicep`, after the existing `storageAccountName` and
       `keyVaultUri` outputs, leaving those two untouched (depends on T006)
-- [ ] T016 [US4] Rebuild and assert `jq '.outputs | keys[]'` on
+- [X] T016 [US4] Rebuild and assert `jq '.outputs | keys[]'` on
       `infra/main.json` returns exactly `keyVaultUri`, `storageAccountName`,
       `workspaceId`, `workspaceName` (SC-005)
 
@@ -191,17 +191,17 @@ and its full resource id.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T017 [P] Assert no hardcoded identifiers: grep `infra/main.json` for GUID
+- [X] T017 [P] Assert no hardcoded identifiers: grep `infra/main.json` for GUID
       patterns, excluding `templateHash`, and confirm zero matches; confirm the
       key vault `tenantId` is still the expression `[subscription().tenantId]`
       (SC-004, FR-011)
-- [ ] T018 [P] Assert tag consistency: all three new resources in
+- [X] T018 [P] Assert tag consistency: all three new resources in
       `infra/main.json` carry `project: ai300-prep` and `environment: learning`,
       matching the two pre-existing resources (FR-009)
-- [ ] T019 Run the full one-shot validation script from
+- [X] T019 Run the full one-shot validation script from
       [quickstart.md](./quickstart.md) and confirm every success criterion
       SC-001 through SC-007 passes
-- [ ] T020 Confirm `git status` does not list `infra/main.json` — the build
+- [X] T020 Confirm `git status` does not list `infra/main.json` — the build
       artifact stays untracked (constitution principle II)
 - [ ] T021 Draft candidate README text for the project author covering the four
       decisions worth recording: no container registry, system-assigned
