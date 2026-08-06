@@ -73,8 +73,8 @@ top of the existing 2
   including the one place (R3) where the newest GA version was deliberately
   *not* taken. `infra/main.json` is already gitignored and stays that way.
 - **III** — The `speckit.git.commit` hooks the git extension registers are all
-  `optional: true`, and `git-config.yml` ships with `auto_commit.default:
-  false`. No commit happens without the author.
+  `optional: true`, and `git-config.yml` ships with auto-commit disabled
+  (`auto_commit.default` is `false`). No commit happens without the author.
 - **IV** — Deferred by design, not skipped: `README.md` is the author's
   first-person account, so Claude may draft candidate text but the author writes
   and commits it. Tracked as the final task.
