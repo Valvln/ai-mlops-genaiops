@@ -24,3 +24,6 @@ infra/main.json
 
 # Local agent settings (machine-specific, may contain credentials)
 .claude/settings.local.json
+
+# Downloaded extension catalog cache: refetched on demand, not source of truth
+.specify/extensions/.cache/
