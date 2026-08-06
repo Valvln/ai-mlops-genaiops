@@ -203,13 +203,13 @@ and its full resource id.
       SC-001 through SC-007 passes
 - [X] T020 Confirm `git status` does not list `infra/main.json` — the build
       artifact stays untracked (constitution principle II)
-- [ ] T021 Draft candidate README text for the project author covering the four
+- [X] T021 Draft candidate README text for the project author covering the four
       decisions worth recording: no container registry, system-assigned
       identity, workspace-based Application Insights forcing a fifth resource,
       and the deliberate choice of a non-latest Log Analytics API version to
       keep local type-checking. **The author writes and owns the final text**
       (constitution principle IV)
-- [ ] T022 Show the complete `git diff` of `infra/main.bicep` and propose the
+- [X] T022 Show the complete `git diff` of `infra/main.bicep` and propose the
       commit. Report the change as *validated to compile*, never as *verified to
       work* — no deployment was performed (constitution principles III and V)
 
