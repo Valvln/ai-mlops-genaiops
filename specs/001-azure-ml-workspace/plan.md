@@ -134,8 +134,8 @@ change appends:
 3. **Two outputs** — workspace name and workspace resource id, appended after
    the existing two.
 
-Every new resource carries the same `project: 'ai300-prep'` / `environment:
-'learning'` tag pair the existing resources use.
+Every new resource carries the same tag pair the existing resources use:
+`project` set to `ai300-prep` and `environment` set to `learning`.
 
 The names of the two telemetry resources are derived inline from
 `uniqueString(resourceGroup().id)` rather than promoted to parameters. They are

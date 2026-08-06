@@ -4,8 +4,8 @@
 2026-08-06
 
 Everything here runs locally and for free. **No command in this guide deploys
-anything to Azure**, and none of them needs an active subscription — only `az
-bicep build`, which works offline.
+anything to Azure**, and none of them needs an active subscription — the only
+Azure command is `az bicep build`, which works offline.
 
 ## Prerequisites
 
