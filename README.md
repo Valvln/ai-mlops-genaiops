@@ -57,6 +57,30 @@ The decisions I made and why:
 - **`Standard_LRS` and TLS 1.2 minimum** — the cheapest redundancy tier is the
   right default for learning; the TLS floor is not something to leave at default.
 
+I then extended the baseline with an Azure ML workspace, plus the Application
+Insights and Log Analytics resources it depends on.
+
+- **No Container Registry.** The workspace can provision one for itself, and I
+  did not let it: roughly $5/month for something no exercise needs yet. The
+  property is simply absent from the template rather than set to null.
+- **A system-assigned managed identity**, because the exam objective on identity
+  is the reason this workspace exists at all. The Key Vault was already on RBAC,
+  so granting roles to that identity is the natural next step — no secrets,
+  nothing to rotate.
+- **Application Insights is workspace-based, so a Log Analytics workspace came
+  with it.** Classic Application Insights is retired; a component without a
+  backing workspace still compiles but is rejected on deployment. This is why
+  the template has five resources and not the four I first specified — I changed
+  the spec rather than ship something that only looked correct.
+- **I did not take the newest API version for Log Analytics.** The provider
+  offers `2026-03-01`, but no Bicep release has type definitions for it yet, so
+  using it means `az bicep build` stops checking that resource's properties. I
+  took `2025-07-01` instead: eight months older, fully type-checked. Validation
+  I can actually run beats a newer version number.
+
+Everything above was validated locally with `az bicep build`. Nothing has been
+deployed: the template compiles, which is not the same as saying it works.
+
 The compiled ARM JSON is **not** tracked. `main.bicep` is the source of truth and
 the JSON is a build artifact, so it lives in `.gitignore`.
 
