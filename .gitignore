@@ -27,3 +27,6 @@ infra/main.json
 
 # Downloaded extension catalog cache: refetched on demand, not source of truth
 .specify/extensions/.cache/
+
+# Spec Kit workflow state: local progress tracking, not source of truth
+specs/**/.spec-context.json
