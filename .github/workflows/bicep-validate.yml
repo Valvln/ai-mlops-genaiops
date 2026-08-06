@@ -23,13 +23,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # Azure CLI è preinstallata sui runner ubuntu-latest: serve solo il modulo bicep.
+      # Azure CLI ships preinstalled on ubuntu-latest runners: only the bicep module is needed.
       - name: Install Bicep CLI
         run: az bicep install
 
       - name: Show Bicep version
         run: az bicep version
 
-      # Fallisce con exit code != 0 se il template non compila.
+      # Exits with a non-zero code if the template does not compile.
       - name: Build template
         run: az bicep build --file infra/main.bicep

@@ -19,5 +19,5 @@ build/
 *.log
 node_modules/
 
-# Artefatto generato da `az bicep build`: la fonte di verità è main.bicep
+# Build artifact from `az bicep build`: main.bicep is the source of truth
 infra/main.json
