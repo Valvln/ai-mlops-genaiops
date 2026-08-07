@@ -78,11 +78,48 @@ Insights and Log Analytics resources it depends on.
   took `2025-07-01` instead: eight months older, fully type-checked. Validation
   I can actually run beats a newer version number.
 
-Everything above was validated locally with `az bicep build`. Nothing has been
-deployed: the template compiles, which is not the same as saying it works.
+Everything above was validated locally with `az bicep build` before anything
+touched Azure.
 
 The compiled ARM JSON is **not** tracked. `main.bicep` is the source of truth and
 the JSON is a build artifact, so it lives in `.gitignore`.
+
+### The first deployment
+
+I have since deployed this template for real, into a throwaway resource group.
+[`infra/DEPLOY.md`](infra/DEPLOY.md) is the runbook: I wrote it before the
+deployment and revised it immediately afterwards, so every expected value in it
+is now an observed one.
+
+The deployment is what taught me the difference I had until then only been
+asserting. Two defects were latent in a template that compiled without a single
+warning and had passed CI:
+
+- **The storage account name was one character over its limit.** `ai300storage`
+  plus a 13-character `uniqueString()` is 25 characters, against a hard cap of
+  24. I had checked name length for the ML workspace and generalised from it —
+  and the storage account turns out to have the tightest limit of the five.
+  Bicep does not validate name length at all.
+- **`managedNetwork` was left to a service default I had never actually seen.**
+  I assumed `what-if` would reveal it. It does not: `what-if` renders what the
+  template declares, not what the resource provider applies at creation time.
+  The stake was not academic — `AllowOnlyApprovedOutbound` provisions a managed
+  firewall billed hourly whether or not anything uses it. The template now pins
+  `Disabled` explicitly.
+
+Two further things were decided by the subscription rather than by the template:
+`westeurope` rejects every resource here with `RequestDisallowedByAzure`, a
+capacity restriction Azure applies to new customers, which is why the default
+region is now `northeurope`; and all five resource providers started out
+unregistered, which fails a deployment immediately.
+
+At rest this deployment should cost approximately nothing — none of the five
+resources carries a fixed monthly fee. I am checking that in Cost Management
+rather than trusting the table, because a figure that is not near zero would
+mean something was provisioned that the template never declared.
+
+So the template compiles, and it also deploys. Those turned out to be genuinely
+different claims.
 
 ### `.github/workflows/` — continuous validation
 
