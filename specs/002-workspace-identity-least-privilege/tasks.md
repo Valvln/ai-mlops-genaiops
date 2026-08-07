@@ -147,7 +147,7 @@ result means nothing until the negative control shows the check can fail.
 - [ ] T027 [US3] Record a verdict **per permission**, not one verdict for both. For each: if the probe reported a problem while the grant was absent, the probe is sensitive to it and that half of SC-006 is satisfied. If it stayed clean, `diagnose` does not test that permission — **report that half as unverified with the reason**, and do not substitute a command that appears to prove the point without doing so. **SC-006 is satisfied only if both halves are.** The vault half is the more likely of the two to come back unverifiable: with no credential-carrying datastore or connection in existence, there may be no operation at this stage that makes the service read a secret at all — which is precisely the case FR-004a says to report as a limit rather than paper over
 - [ ] T028 [US3] Run `az ml workspace sync-keys` as the control-plane probe. If it fails, record it as a finding — **do not treat it as an FR-016 trigger**. Nothing in this project consumes it, and under FR-004 a capability with no consumer does not justify a permission
 - [ ] T029 [US3] If any verification shows the workspace lost something it actually needs, apply FR-016: restore the permission immediately from the T008 reversal, record which operation failed and which grant covered it, and **stop for the author to decide**. Do not re-grant and then write the justification to match
-- [ ] T030 [US3] Confirm SC-011: re-run the verification as the last action and confirm the environment is left working, with no permission gap open
+- [ ] T030 [US3] Confirm SC-011 **and re-confirm SC-008 on the final state**: as the last action, re-run both the dry run and the verification. T017 established idempotence *before* the three removals and *before* the negative control deleted and recreated a grant, so it says nothing about the state this feature actually leaves behind — in particular, a grant recreated by T026 must carry the same deterministic name as the one it replaced, or the dry run will want to create it again. The dry run must report no change of any kind, the two grants must still be exactly two, and no permission gap may be left open
 
 **Checkpoint**: the reduction is verified, or its verification is honestly
 reported as inconclusive. Either way the environment works.
@@ -215,7 +215,7 @@ Everything else is sequential by dependency or by safety.
 | SC-005 no create/delete or access governance | T023 |
 | SC-006 service-side proof, with negative control **per permission** | T025, T026, T027 — satisfied only if both halves pass |
 | SC-007 five resources unchanged | T024 |
-| SC-008 redeploy changes nothing | T017 |
+| SC-008 redeploy changes nothing | T017 on the declared grants, re-confirmed on the final state at T030 |
 | SC-009 cost $0 | by construction — no task creates a billable thing |
 | SC-010 reversal complete and runnable | T010 |
 | SC-011 environment left working | T030 |

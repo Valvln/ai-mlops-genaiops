@@ -190,6 +190,32 @@ unavailable.
 
 ---
 
+---
+
+## Step 6 — close out on the state you are actually leaving behind
+
+Step 4 checked idempotence before the removals, and step 5b deleted and
+recreated a grant. Neither describes the final state, so repeat the two checks
+that matter as the **last** action:
+
+```bash
+# The dry run must still report no change of any kind
+az deployment group what-if -g "$RG" --template-file infra/main.bicep
+
+# Still exactly two grants, both declared
+az role assignment list --all --assignee "$MI" \
+  --query "[].{role:roleDefinitionName, scope:scope}" -o table
+```
+
+The specific thing this catches: a grant recreated during the negative control
+must carry the same deterministic name as the one it replaced. If it does not,
+the dry run will want to create it again — which means the naming is not
+deterministic after all and SC-006 and SC-008 are in conflict.
+
+Do not end the session on a dry run that wants to change something.
+
+---
+
 ## If something needed is missing
 
 Restore first, investigate second (FR-016). The restore commands are in
