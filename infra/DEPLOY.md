@@ -262,9 +262,21 @@ az resource show \
             containerRegistry:properties.containerRegistry}"
 ```
 
-**The check that matters most**: `az resource list` must return **5** rows. If a
-container registry appears, the workspace provisioned one despite the template —
-investigate before doing anything else, because that is a recurring charge.
+**The check that matters most**: no container registry appears. If one does, the
+workspace provisioned it despite the template — investigate before doing
+anything else, because that is a recurring charge.
+
+**On the row count**: this runbook originally said the list must return exactly
+**5**. It returns **6**. The sixth is `Application Insights Smart Detection`, a
+`microsoft.insights/actiongroups` resource the platform created by itself at
+17:06 on 2026-08-07 — ten minutes after the workspace, and declared by no
+template. It notifies through ARM roles with no SMS or voice receivers, so it
+carries no charge.
+
+Two things worth taking from it. First, the count was never the real check;
+*which* resources appear is. Second, the platform adding resources behind the
+template is not a one-off — it did the same thing with role assignments, which
+is what feature 002 exists to deal with.
 
 ### Observed on the first deployment
 
@@ -328,6 +340,100 @@ Current margins, worth re-checking whenever a prefix changes:
 ### `managedNetwork` was left to an unseen service default
 
 Covered in section 1. Now declared explicitly.
+
+---
+
+## Workspace identity permissions
+
+Added by feature 002. The workspace has a system-assigned managed identity
+(`principalId` recorded in section 3). What that identity is allowed to do is
+**not** something the workspace deployment alone decides — the platform grants
+it permissions of its own accord, and none of them appears in the template.
+
+### What the platform granted by itself
+
+Observed on 2026-08-07, all four created by a platform service principal at
+workspace creation, with random assignment names:
+
+| What it allowed | Scope | Kept? |
+| --- | --- | --- |
+| Wildcard control over the vault and the storage account, management of container registries, and writing resource groups | **whole resource group** | removed |
+| Read and write of blob data | storage account | kept, now declared in the template |
+| Privileged read and write of file shares | storage account | removed |
+| Full management of the vault, including who else may access it | key vault | replaced by secret **read** only |
+
+### What it holds now
+
+Two grants, both declared in `main.bicep`, both scoped to a single resource:
+
+| Role | Scope | Why |
+| --- | --- | --- |
+| Storage Blob Data Contributor | storage account | The four default datastores are identity-based and carry no stored credentials, so this is the only way the service reaches its own artifacts. |
+| Key Vault Secrets User | key vault | The workspace reads secrets it keeps in its own vault. It does not need to write any, and does not need to govern who else may read them. |
+
+Nothing is granted on Application Insights, on the Log Analytics workspace, or
+at resource-group scope.
+
+### Putting a permission back
+
+Three grants were removed. Each has exactly one restore command. Nothing below
+depends on a value that is not written here.
+
+```bash
+export PATH="/usr/local/bin:$PATH"
+RG=rg-ai300-test01
+MI=85e8321f-1e51-42cb-8ced-7fca9b51498b
+
+SA=$(az storage account show -n ai300st2mgou37pfmjou -g $RG --query id -o tsv)
+KV=$(az keyvault show -n ai300kv2mgou37pfmjou -g $RG --query id -o tsv)
+RGID=$(az group show -n $RG --query id -o tsv)
+
+# 1. Resource-group-wide authority — needed if the workspace must provision
+#    compute, a container registry, or an endpoint on demand
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Azure AI Administrator" --scope "$RGID"
+
+# 2. File share access — needed as soon as a compute target mounts
+#    workspacefilestore or workspaceworkingdirectory
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage File Data Privileged Contributor" --scope "$SA"
+
+# 3. Vault administration — needed only to manage vault access itself. If the
+#    need is merely to WRITE secrets, widen the declared grant to
+#    "Key Vault Secrets Officer" in main.bicep instead of running this.
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Key Vault Administrator" --scope "$KV"
+```
+
+`--assignee-object-id` with an explicit principal type is used rather than
+`--assignee`, which resolves the principal through a directory lookup a
+non-administrator may not be allowed to perform.
+
+**If a deployment fails after the blob grant was removed**, the template would
+normally recreate it. Re-running the deployment is the first thing to try. If
+the template itself is the problem, put the grant back by hand and sort the
+template out afterwards — do not leave the workspace without it:
+
+```bash
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage Blob Data Contributor" --scope "$SA"
+```
+
+### Where a failure is expected later
+
+These are not defects. They are written down so a future failure is recognised
+in seconds rather than diagnosed from scratch.
+
+| When | What fails | What to do |
+| --- | --- | --- |
+| A compute target mounts `workspacefilestore` or `workspaceworkingdirectory` | file share access | restore command 2 |
+| The workspace provisions compute, a registry, or an endpoint on demand | resource-group authority | restore command 1 |
+| A credential-carrying datastore or connection is created | writing a secret to the vault | widen the declared vault grant to secret write — **not** restore command 3 |
+| The first job emits telemetry | metrics publication on Application Insights | grant it then, with a stated need |
 
 ---
 
