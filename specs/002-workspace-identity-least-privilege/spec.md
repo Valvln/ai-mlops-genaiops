@@ -47,6 +47,30 @@ The feature is therefore a **reduction**, not an addition: bring the identity
 down to permissions this project can name a need for, and put the survivors
 under the template's ownership.
 
+## Clarifications
+
+### Session 2026-08-07
+
+- Q: Which grants does the template take ownership of? → A: All of the ones that
+  survive. Each surviving permission is removed in the form the platform created
+  it and recreated by the template under a deterministic name, so that reading
+  the template answers the question in full rather than for one grant out of
+  four.
+- Q: How narrow should the surviving permissions be? → A: Narrow to what the
+  environment needs today. A permission whose only justification is a capability
+  this project has not built yet is dropped, accepting that a later exercise will
+  hit an authorization error and re-grant it deliberately.
+- Q: What counts as proof that the identity still works? → A: An operation the
+  service performs under its own identity, paired with a negative control that
+  shows the same operation failing when the permission is withheld. A command
+  authenticated as the author proves nothing, because the author's own authority
+  would carry it either way.
+- Q: What happens if verification shows the workspace lost something it needed?
+  → A: Restore the missing permission immediately using the recorded reversal,
+  record which operation failed and which permission covered it, and stop for
+  the author to decide. The environment is never left broken, and the failure
+  becomes an input to the plan rather than a defect to diagnose later.
+
 ## User Scenarios & Testing *(mandatory)*
 
 ### User Story 1 - Take away the permission that exceeds any nameable need (Priority: P1)
@@ -127,20 +151,26 @@ environment, and the failure mode would surface much later — during a future
 exercise — where it would be hard to attribute. It ranks below US1 and US2
 because it verifies them rather than delivering the change.
 
-**Independent Test**: after the reduction, run a command that makes the
-workspace exercise its identity against a resource it still has permission for,
-and confirm it completes without an authorization failure.
+**Independent Test**: after the reduction, cause the service to act under its
+own identity against a resource it still has permission for, and confirm it
+completes without an authorization failure. The check only counts if the same
+operation is also seen to fail when that permission is withheld — otherwise a
+pass proves nothing.
 
 **Acceptance Scenarios**:
 
 1. **Given** the reduction has been applied, **When** the workspace is queried,
    **Then** it reports itself as successfully provisioned, exactly as before.
-2. **Given** the reduction has been applied, **When** an operation that requires
-   the workspace identity to reach the storage account is performed, **Then** it
-   succeeds without an authorization error.
-3. **Given** the reduction has been applied, **When** an operation that requires
-   the workspace identity to reach the secret store is performed, **Then** it
-   succeeds without an authorization error.
+2. **Given** the reduction has been applied, **When** the service reaches the
+   storage account under its own identity, **Then** it succeeds without an
+   authorization error.
+3. **Given** the reduction has been applied, **When** the service reaches the
+   secret store under its own identity, **Then** it succeeds without an
+   authorization error.
+4. **Given** a verification step that passes, **When** the permission it depends
+   on is withheld and the step is repeated, **Then** it fails with an
+   authorization error — establishing that the passing result was caused by the
+   permission and not by the author's own authority.
 
 ---
 
@@ -182,9 +212,12 @@ or work it out.
   has to change.
 - **A gap while ownership transfers.** Taking a permission out of the platform's
   hands and putting it in the template's means the old grant is removed and a
-  new one created. Between the two the identity lacks that permission. Nothing
-  is running against this environment, so the window is expected to be harmless
-  — but the ordering must be deliberate rather than incidental.
+  new one created. Between the two the identity lacks that permission. This now
+  applies to every permission that survives, not just to the one being removed,
+  so there are several such windows rather than one. Nothing is running against
+  this environment, so they are expected to be harmless — but the ordering must
+  be deliberate rather than incidental, and no window may be left open at the
+  end of a working session.
 - **Requesting a permission that already exists fails.** The platform rejects a
   duplicate grant of the same capability to the same identity at the same scope
   when it is requested under a different name. Any permission the template
@@ -206,7 +239,14 @@ or work it out.
 - **Narrowing can go too far.** A permission that looks excessive may cover a
   path the workspace uses without announcing it. Each reduction needs a stated
   reason for believing the capability is unused, and US3 exists to catch the
-  cases where that belief is wrong.
+  cases where that belief is wrong. When it does, FR-016 governs: restore first,
+  report the finding, and let the author decide — never quietly rewrite the
+  justification to fit what failed.
+- **A verification that cannot fail is not a verification.** Because the author
+  holds broad authority on the subscription, almost any command run by hand will
+  succeed regardless of what the identity can do. Any check that does not
+  distinguish the two is worthless here, which is why FR-004a requires the
+  negative control rather than merely a passing result.
 
 ## Requirements *(mandatory)*
 
@@ -217,11 +257,25 @@ or work it out.
 - **FR-002**: Every permission the workspace identity holds MUST be scoped to
   the single resource it applies to.
 - **FR-003**: Every permission the workspace identity holds MUST be declared in
-  the infrastructure template.
+  the infrastructure template. This applies to all of them, not only to the one
+  being removed: a permission the identity keeps MUST be taken out of the form
+  the platform created it in and recreated under the template's ownership, so
+  that no permission remains whose existence is visible only in the live
+  environment.
 - **FR-004**: Each declared permission MUST correspond to a need this project
   can state in one sentence, referring to something the environment actually
   does today. A permission justified only by a capability that has not been
-  built yet MUST NOT be granted.
+  built yet MUST NOT be granted, even where that capability is already scheduled
+  and the permission would predictably be needed again soon. The expected cost of
+  this — an authorization failure during a later exercise — is accepted, and is
+  covered by the reversal required in FR-012.
+- **FR-004a**: The evidence that the workspace still works MUST come from an
+  operation the service performs with its own identity, not from a command
+  authenticated as the author. It MUST be paired with a negative control: the
+  same operation has to fail when the permission it depends on is absent. If no
+  such operation exists at this stage of the project, that MUST be reported as a
+  limit of the verification rather than replaced by a command that appears to
+  prove the point without doing so.
 - **FR-005**: No permission the identity holds MAY confer wildcard authority
   over a resource type, the ability to create or delete resources, or the
   ability to alter the access configuration of the resource it applies to.
@@ -251,6 +305,13 @@ or work it out.
 - **FR-015**: The change MUST pass a local template build and a dry run against
   the live environment before it is proposed for commit, and the effective
   permissions MUST be re-checked independently after deployment.
+- **FR-016**: If verification shows the workspace has lost a permission it
+  needed, the missing permission MUST be restored immediately using the recorded
+  reversal, and the feature MUST stop for the author to decide how to proceed.
+  The environment MUST NOT be left in a non-working state while the cause is
+  investigated, and a permission MUST NOT be re-granted and then retroactively
+  justified as necessary — a failure of this kind is reported as a finding, not
+  absorbed as a requirement.
 
 ### Key Entities
 
@@ -292,9 +353,12 @@ reading the change and forming a judgement.
 - **SC-005**: After deployment, no permission the identity holds allows creating
   or deleting resources, and none allows changing the access configuration of
   the resource it is scoped to.
-- **SC-006**: After deployment, the workspace reports itself as successfully
-  provisioned, and an operation that requires the identity to reach the storage
-  account and the secret store completes without an authorization failure.
+- **SC-006**: After deployment, an operation carried out by the service under
+  its own identity — against the storage account and against the secret store —
+  completes without an authorization failure, **and** the same operation is
+  observed to fail when the permission it depends on is withheld. A command
+  authenticated as the author does not satisfy this criterion: it would pass
+  whether or not the identity retained any permission at all.
 - **SC-007**: After deployment, the environment still contains exactly the same
   five resources, with the same names, as before the change.
 - **SC-008**: Redeploying the unchanged template a second time produces a dry
@@ -305,6 +369,11 @@ reading the change and forming a judgement.
 - **SC-010**: Every step of the recorded reversal is a runnable command, and the
   count of removed permissions matches the count of restore commands written
   down.
+- **SC-011**: The environment is left working at the end of the feature,
+  whatever the outcome. Re-running the verification of SC-006 as the last action
+  succeeds. The only period in which the identity is deliberately short of a
+  permission is the negative control required by SC-006, which is reverted
+  immediately and whose revert is itself confirmed by re-running the check.
 
 ## Assumptions
 
@@ -312,7 +381,9 @@ reading the change and forming a judgement.
   this feature; only the permissions pointing at them change.
 - Nothing is currently running against this environment — no job, no endpoint,
   no scheduled work — so a brief interruption while a permission changes hands
-  is harmless.
+  is harmless. This is what makes both the ownership transfer and the
+  deliberate negative control of SC-006 acceptable to perform against a live
+  environment rather than a copy.
 - The author holds enough authority on the subscription to create and remove
   permission grants. Verified before this specification was written; recorded
   here because a reader with only the ability to deploy resources cannot carry
