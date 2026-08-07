@@ -153,5 +153,6 @@ non-administrator may not be permitted to perform.
 | SC-003 | `az role assignment list --all --assignee $MI --query "[?!contains(scope,'/providers/Microsoft.')]"` | returns `[]` — no grant above a single resource |
 | SC-004 | `az role assignment list --all --assignee $MI --query "length(@)"` | returns `2` |
 | SC-007 | `az resource list -g $RG --query "length(@)"` | returns `5` |
-| SC-002, SC-008 | `az deployment group what-if -g $RG --template-file infra/main.bicep` | no create, delete, or modify on any resource |
+| SC-002 | `az deployment group what-if -g $RG --template-file infra/main.bicep` | exactly two entries, both permission grants to create; nothing to delete, nothing to modify, nothing else to create |
+| SC-008 | the same command, re-run after the deployment with no edits | no change of any kind |
 | SC-006 | see [quickstart.md](../quickstart.md) | service-side probe passes, and its negative control fails |

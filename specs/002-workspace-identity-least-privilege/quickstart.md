@@ -65,11 +65,15 @@ az deployment group what-if -g "$RG" --template-file infra/main.bicep
 
 | Check | Expected |
 | --- | --- |
-| Resources to create | **0** |
+| Role assignments to create | **2** |
+| Anything else to create | **0** |
 | Resources to delete | **0** |
 | Resources to modify | **0** |
-| Role assignments to create | **2** |
 | Anything mentioning a container registry or compute | absent |
+
+A permission grant is a resource in the dry run's output, so the two grants
+*will* appear under Create. That is the change working, not a violation of
+SC-002 — what must be zero is everything else.
 
 If the dry run wants to modify one of the five resources, the template drifted —
 stop and find out why before deploying.
@@ -135,23 +139,37 @@ The arrays should still be empty, matching the baseline.
 ### 5b — the negative control, without which 5a is worthless
 
 An empty result only means something if a *missing* permission would make it
-non-empty. Establish that:
+non-empty. SC-006 asks for proof against the storage account **and** the secret
+store, so this runs **twice — once per declared grant**:
 
-1. Remove the declared blob grant.
-2. Re-run `diagnose`, and attempt an operation that reads the workspace's own
-   blob artifacts.
+| Grant withheld | Array that should become non-empty |
+| --- | --- |
+| blob data access on the storage account | `storageAccountResults` |
+| secret read on the key vault | `keyVaultResults` |
+
+For each one, in turn:
+
+1. Remove the declared grant.
+2. Re-run `diagnose` and record whether its matching array became non-empty.
 3. Re-create the grant by redeploying the template.
-4. Confirm the probe is clean again.
+4. Confirm the probe is clean again — **before** moving to the other grant.
 
-**Interpreting the outcome — both results are informative:**
+**Interpreting the outcome — record a verdict per permission, not one for both:**
 
 | Observation | What it means | What to do |
 | --- | --- | --- |
-| The probe reports a problem while the grant is absent, and is clean once restored | The probe is sensitive to this permission. 5a is real evidence. SC-006 satisfied. | Record it and move on. |
-| The probe stays clean with the grant absent | The probe does not test this permission. **5a proves nothing** and cannot be quoted as a pass. | Say so plainly. Report SC-006 as unverified with the reason, per FR-004a — do not substitute a command that appears to prove the point. |
+| The probe reports a problem while the grant is absent, and is clean once restored | The probe is sensitive to this permission. 5a is real evidence for it. | Record it and move on. |
+| The probe stays clean with the grant absent | The probe does not test this permission. **5a proves nothing about it** and cannot be quoted as a pass. | Say so plainly. Report that half of SC-006 as unverified with the reason, per FR-004a. |
 
-Step 3 of the negative control is not optional. The environment must be left
-working (SC-011).
+**SC-006 is satisfied only if both halves are.** The vault half is the more
+likely to come back unverifiable: with no credential-carrying datastore or
+connection in existence, there may be no operation at this stage that makes the
+service read a secret at all. That is the case FR-004a anticipates — report it
+as a limit of the verification rather than substituting a command that looks
+like proof.
+
+Step 3 is not optional, in either pass. The environment must be left working
+(SC-011).
 
 ### 5c — the control-plane probe, and how to read its failure
 

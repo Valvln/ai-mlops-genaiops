@@ -340,9 +340,13 @@ reading the change and forming a judgement.
 
 - **SC-001**: The local template build completes with zero errors and zero
   warnings.
-- **SC-002**: The dry run against the live environment reports zero resources
-  created, zero deleted, and zero modified. The only entries it shows are
-  permission grants.
+- **SC-002**: The dry run against the live environment shows **exactly two
+  entries, both of them permission grants to be created**. It reports nothing to
+  delete, nothing to modify, and nothing of any other kind to create. The
+  criterion is about *which kinds* of entry appear, not about the count being
+  zero: a permission grant is itself a resource in the dry run's output, so a
+  criterion demanding zero creations could never pass on a change whose entire
+  purpose is to declare two of them.
 - **SC-003**: After deployment, enumerating the permissions held by the
   workspace identity returns **zero** grants scoped to the resource group or
   above.

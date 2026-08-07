@@ -37,7 +37,11 @@ compute.
    already changed. This is a sequencing constraint, not a re-prioritisation.
 2. **Phase 4 must not be interrupted.** Deleting the platform's blob grant opens
    the only unavoidable permission gap, and the deployment closes it. Never stop
-   between T014 and T016.
+   between T015 and T016.
+3. **Validate before touching the live environment.** The dry run (T014) runs
+   *before* the deletion (T015), not after. Its output is the same either way,
+   so ordering it first costs nothing and means a template problem is found
+   before a permission has been removed for it.
 
 ---
 
@@ -95,8 +99,8 @@ declares; the set matches what the identity holds.
 - [ ] T011 [US2] Add the two role definition variables to `infra/main.bicep` using `subscriptionResourceId`, exactly as specified in [contracts/role-assignments.md](contracts/role-assignments.md) — no literal subscription identifier
 - [ ] T012 [US2] Add the two role assignment resources to `infra/main.bicep` at API version `2022-04-01`, each with `scope` set to the resource symbol, `name` derived by `guid()`, `principalId` from `mlWorkspace.identity.principalId`, and `principalType: 'ServicePrincipal'`
 - [ ] T013 [US2] Validate compilation: `az bicep build --file infra/main.bicep` must exit 0 with **no output** (SC-001). Any warning is a finding — stop and resolve it before continuing
-- [ ] T014 [US2] Delete the platform's blob grant (C2) per [contracts/role-assignments.md](contracts/role-assignments.md). **This opens the only permission gap in the feature — do not stop here**
-- [ ] T015 [US2] Dry run: `az deployment group what-if -g rg-ai300-test01 --template-file infra/main.bicep`. Confirm zero resources created, deleted, or modified, and exactly 2 role assignments to create (SC-002). Save the output to `evidence/what-if-before-deploy.txt`
+- [ ] T014 [US2] Dry run **before touching the live environment**: `az deployment group what-if -g rg-ai300-test01 --template-file infra/main.bicep`. Confirm exactly 2 role assignments to create, nothing else to create, nothing to delete, nothing to modify (SC-002). Save the output to `evidence/what-if-before-deploy.txt`. Running this first means a template problem is found before any permission has been removed
+- [ ] T015 [US2] Delete the platform's blob grant (C2) per [contracts/role-assignments.md](contracts/role-assignments.md). **This opens the only permission gap in the feature — do not stop here**
 - [ ] T016 [US2] Deploy: `az deployment group create -g rg-ai300-test01 --template-file infra/main.bicep --name ai300-rbac-002`. The blob gap closes here
 - [ ] T017 [US2] Confirm idempotence (SC-008): re-run the dry run with no edits and confirm it reports no change whatsoever
 
@@ -139,8 +143,8 @@ command run by hand succeeds regardless of what the identity can do. A passing
 result means nothing until the negative control shows the check can fail.
 
 - [ ] T025 [US3] Run `az ml workspace diagnose` and compare against `evidence/diagnose-before.json`; save to `evidence/diagnose-after.json`
-- [ ] T026 [US3] Establish the probe's sensitivity — the negative control required by FR-004a: delete the declared blob grant, re-run `diagnose`, record whether it reports anything, then redeploy the template to restore the grant and confirm the probe is clean again. **Restoring is not optional** (SC-011)
-- [ ] T027 [US3] Record the verdict honestly. If the probe reported a problem while the grant was absent, SC-006 is satisfied and `diagnose` is established as evidence. If it stayed clean, `diagnose` does not test this permission — **report SC-006 as unverified with the reason**, and do not substitute a command that appears to prove the point without doing so
+- [ ] T026 [US3] Run the negative control required by FR-004a **once per declared grant**, because SC-006 asks for proof against the storage account *and* the secret store. For each of the two: delete the declared grant, re-run `diagnose`, record whether the matching result array (`storageAccountResults` for blob, `keyVaultResults` for the vault) becomes non-empty, then redeploy the template to restore it and confirm the probe is clean again. **Restoring is not optional, and is done before moving to the next grant** (SC-011)
+- [ ] T027 [US3] Record a verdict **per permission**, not one verdict for both. For each: if the probe reported a problem while the grant was absent, the probe is sensitive to it and that half of SC-006 is satisfied. If it stayed clean, `diagnose` does not test that permission — **report that half as unverified with the reason**, and do not substitute a command that appears to prove the point without doing so. **SC-006 is satisfied only if both halves are.** The vault half is the more likely of the two to come back unverifiable: with no credential-carrying datastore or connection in existence, there may be no operation at this stage that makes the service read a secret at all — which is precisely the case FR-004a says to report as a limit rather than paper over
 - [ ] T028 [US3] Run `az ml workspace sync-keys` as the control-plane probe. If it fails, record it as a finding — **do not treat it as an FR-016 trigger**. Nothing in this project consumes it, and under FR-004 a capability with no consumer does not justify a permission
 - [ ] T029 [US3] If any verification shows the workspace lost something it actually needs, apply FR-016: restore the permission immediately from the T008 reversal, record which operation failed and which grant covered it, and **stop for the author to decide**. Do not re-grant and then write the justification to match
 - [ ] T030 [US3] Confirm SC-011: re-run the verification as the last action and confirm the environment is left working, with no permission gap open
@@ -205,11 +209,11 @@ Everything else is sequential by dependency or by safety.
 | Success criterion | Settled by |
 | --- | --- |
 | SC-001 build clean | T013 |
-| SC-002 dry run shows only grants | T015 |
+| SC-002 dry run shows two grants and nothing else | T014 |
 | SC-003 nothing above a single resource | T021 |
 | SC-004 held set equals declared set | T022 |
 | SC-005 no create/delete or access governance | T023 |
-| SC-006 service-side proof, with negative control | T025, T026, T027 |
+| SC-006 service-side proof, with negative control **per permission** | T025, T026, T027 — satisfied only if both halves pass |
 | SC-007 five resources unchanged | T024 |
 | SC-008 redeploy changes nothing | T017 |
 | SC-009 cost $0 | by construction — no task creates a billable thing |
@@ -224,11 +228,11 @@ Everything else is sequential by dependency or by safety.
 | FR-004a service-side proof | T026, T027 |
 | FR-006 deterministic naming | T012, T017 |
 | FR-007, FR-008 no literals | T011, T012 |
-| FR-009, FR-010, FR-011 no new resource, no secret, one principal | T015, T024 |
+| FR-009, FR-010, FR-011 no new resource, no secret, one principal | T014, T024 |
 | FR-012 reversal recorded | T007–T009 |
-| FR-013 removal separately authorized | T014, T018–T020 |
+| FR-013 removal separately authorized | T015, T018–T020 |
 | FR-014 API version verified | done in planning (research.md R1) |
-| FR-015 validate before commit | T013, T015 |
+| FR-015 validate before commit | T013, T014 |
 | FR-016 restore on failure | T029 |
 
 ---
@@ -243,7 +247,7 @@ One logical change per commit, each proposed to the author with a diff
 2. **T011–T013** — the template change, once it compiles clean.
 3. **T031, T032, T033, T034** — documentation after the outcome is known.
 
-Live-environment acts (T014, T016, T018–T020, T026) are not commits. Each is a
+Live-environment acts (T015, T016, T018–T020, T026) are not commits. Each is a
 separate authorization the author gives before it runs.
 
 ---
@@ -251,7 +255,7 @@ separate authorization the author gives before it runs.
 ## Notes
 
 - Nothing here is validated yet. `az bicep build` runs at T013 and the dry run at
-  T015; until then this is a plan, not a verified change.
+  T014; until then this is a plan, not a verified change.
 - The riskiest single step is T019. Confirm T008 is written and committed before
   running it.
 - The most likely thing to go wrong quietly is T027 — reporting a clean probe as

@@ -43,7 +43,7 @@ at resource-group scope.
 | C1 → gone | delete | No need can be named for it. It is the whole point of the feature. |
 | C2 → T1 | delete, then re-create from the template | Same role and scope, so the template cannot add it alongside; ownership transfers by replacement. |
 | C3 → gone | delete | Backs the two file datastores, which only a compute target mounts. There is no compute. **Highest-risk removal in this feature.** |
-| C4 → T2 | create T2, then delete C4 | Different role definitions, so both can exist briefly. Creating first means the identity never lacks vault access. |
+| C4 → T2 | create T2, then delete C4 | Different role definitions, so both can exist briefly. Creating first means the identity never lacks vault **read** access. Write access and access governance are dropped deliberately — see the note below. |
 
 ### Ordering, and where the gaps are
 
@@ -54,8 +54,15 @@ none open at the end of a session.
    unavoidable gap, because T1 cannot be created while C2 exists.
 2. **Deploy the template.** Creates T1 and T2. The blob gap closes here; the
    vault is covered by C4 throughout, since C4 is still in place.
-3. **Delete C4, C3, C1.** T2 already covers the vault, so deleting C4 opens no
-   gap. C3 and C1 have no replacement by design.
+3. **Delete C4, C3, C1.** T2 already covers reading the vault, so deleting C4
+   opens **no read gap**. It does drop the ability to write secrets and to
+   govern who else may access the vault — deliberately, and on an inference that
+   [research.md](research.md) R6 records as unverified: the vault's contents
+   could not be listed, so "the workspace has nothing to write" rests on the
+   absence of any credential-carrying datastore or connection rather than on
+   direct observation. If that inference is wrong, the symptom is an
+   authorization error and the fix is widening T2 to secret write — not
+   restoring C4. C3 and C1 have no replacement by design.
 4. **Verify**, then leave the environment working.
 
 The gap in step 1 lasts as long as a deployment — roughly a minute on the
