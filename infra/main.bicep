@@ -1,5 +1,9 @@
-param location string = 'westeurope'
-param storageAccountName string = 'ai300storage${uniqueString(resourceGroup().id)}'
+// Not westeurope: that region rejects new subscriptions with
+// RequestDisallowedByAzure ("not accepting new customers").
+param location string = 'northeurope'
+// Prefix kept short: storage account names cap at 24 characters, and
+// uniqueString() already consumes 13 of them.
+param storageAccountName string = 'ai300st${uniqueString(resourceGroup().id)}'
 param keyVaultName string = 'ai300kv${uniqueString(resourceGroup().id)}'
 param workspaceName string = 'ai300ml${uniqueString(resourceGroup().id)}'
 
@@ -88,6 +92,13 @@ resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2026-05-01' =
     storageAccount: storageAccount.id
     keyVault: kv.id
     applicationInsights: applicationInsights.id
+    // Declared rather than left to the service default: an isolation mode of
+    // AllowOnlyApprovedOutbound provisions a managed Azure Firewall, billed
+    // hourly whether or not anything uses it. what-if does not reveal the
+    // default, so it is pinned here instead of discovered after the fact.
+    managedNetwork: {
+      isolationMode: 'Disabled'
+    }
   }
   tags: {
     project: 'ai300-prep'
