@@ -162,10 +162,12 @@ than resolved by quietly stepping outside the feature's scope.
 
 ---
 
-## R6 — The one undecided permission: what the identity needs on the vault
+## R6 — What the identity needs on the vault
 
-**Status: OPEN — the plan proposes a choice and a way to settle it, but does not
-claim to have settled it.**
+**Status: DECIDED by the author on 2026-08-07 — Key Vault Secrets User (secret
+read).** The reasoning below is the record of how the choice was reached; the
+uncertainty it describes is real and is carried into the runbook rather than
+resolved.
 
 The current grant (Key Vault Administrator) is disqualified outright: it confers
 control over who else may access the vault, which FR-005 forbids. The
@@ -184,16 +186,24 @@ only.
 Against that: it cannot be observed (R5) whether the workspace wrote anything to
 the vault during creation, and if it did, it will likely need to write again.
 
-**Proposed decision**: **Key Vault Secrets User** — the narrower of the two —
-because it is the only one of the pair supported by an observed fact, and the
-clarification in the spec settled that an unproven future need does not justify
-a permission. The cost if wrong is an authorization failure, which FR-016 turns
-into a recorded finding and a one-command restore.
+**Decision**: **Key Vault Secrets User** — the narrower of the two — because it
+is the only one of the pair supported by an observed fact, and the clarification
+in the spec settled that an unproven future need does not justify a permission.
+The cost if wrong is an authorization failure, which FR-016 turns into a
+recorded finding and a one-command restore.
 
-**How to settle it properly**: the author grants himself vault read access
-temporarily and lists the secrets. That is a decision for the author, not
-something this plan performs — it grants a permission to a principal the feature
-declares out of scope.
+**Accepted with its uncertainty intact.** It could not be confirmed by looking
+(R5), and it was not confirmed by looking: settling it that way would have meant
+granting the author a vault data role, which FR-011 places outside this feature.
+The decision therefore rests on the absence of any credential-carrying datastore
+or connection, which is an observed fact, plus the inference that a workspace
+with nothing to write does not need to write. The inference is reasonable and
+unverified, and is recorded as such.
+
+**What to do if it turns out to be too narrow**: widen to Key Vault Secrets
+Officer — still far short of the administration grant being removed, since it
+confers no control over who else may access the vault. Restoring Key Vault
+Administrator is not the fix.
 
 ---
 

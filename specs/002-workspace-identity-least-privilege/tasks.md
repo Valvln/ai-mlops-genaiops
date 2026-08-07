@@ -61,7 +61,7 @@ deletion, and they cease to exist once deleted.
 - [ ] T003 Capture the four current grants **with their assignment names** into `specs/002-workspace-identity-least-privilege/evidence/grants-before.json` using the baseline command in [quickstart.md](quickstart.md); confirm the result contains exactly 4 entries
 - [ ] T004 [P] Capture the service-side baseline into `evidence/diagnose-before.json` via `az ml workspace diagnose`; confirm every result array is empty
 - [ ] T005 [P] Capture the resource inventory into `evidence/resources-before.txt` via `az resource list -g rg-ai300-test01`; confirm it lists exactly 5 resources
-- [ ] T006 **Author decision required** — settle the open question in [research.md](research.md) R6: whether the vault grant is secret **read** (proposed) or secret **write**. Record the choice and its reason in `research.md` under R6, replacing "OPEN". Settling it by observation requires granting the author a vault data role, which FR-011 places outside this feature — so this is an explicit decision, not a lookup
+- [x] T006 **Author decision required** — settle the open question in [research.md](research.md) R6: whether the vault grant is secret **read** (proposed) or secret **write**. **Done 2026-08-07: secret read (Key Vault Secrets User)**, taken deliberately on incomplete evidence; the unverified inference and the widening path are recorded in `research.md` R6
 
 **Checkpoint**: the baseline is recorded, the vault role is decided, and every
 grant can still be addressed by name.

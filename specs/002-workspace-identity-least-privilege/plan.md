@@ -122,19 +122,23 @@ it applies to, which is the thing a reviewer most needs to see together.
 | Create the vault grant before deleting the old one | The two role definitions differ, so both may coexist — which means the vault gap can be avoided entirely |
 | `principalType: 'ServicePrincipal'` | Avoids a directory-replication failure on a clean rebuild, where the identity is minutes old (research.md R9) |
 
-## The one open question
+## The vault permission — decided, with its uncertainty carried forward
 
-**What the identity needs on the vault is proposed, not settled.** Secret *read*
-is proposed because no credential-carrying datastore or connection exists. It
-could not be confirmed by looking, because Owner grants no data-plane access
-under RBAC — attempting to list the vault's secrets returns `Forbidden`
-(research.md R5).
+**Decided by the author on 2026-08-07: secret read** (Key Vault Secrets User).
 
-Settling it by observation would mean granting the author a vault data role,
-which FR-011 puts outside this feature. That is the author's call to make
-explicitly, not something to slip in quietly. If read turns out to be too
-narrow, the failure is an authorization error and the fix is widening to secret
-write — which is still narrower than what is there today.
+The basis is an observed fact — no credential-carrying datastore or connection
+exists, so there is nothing for the workspace to write — plus the inference that
+a workspace with nothing to write does not need write access. **The inference is
+unverified**, and could not be verified: Owner grants no data-plane access under
+RBAC, so the vault's contents cannot be listed (research.md R5), and settling it
+that way would mean granting the author a vault data role, which FR-011 places
+outside this feature.
+
+The decision was therefore taken deliberately on incomplete evidence rather than
+deferred. If read turns out to be too narrow, the symptom is an authorization
+error, and the fix is to widen to secret write — **not** to restore vault
+administration, which confers control over who else may access the vault and is
+what FR-005 exists to forbid.
 
 ## Phase status
 
