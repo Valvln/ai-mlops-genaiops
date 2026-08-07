@@ -1,15 +1,17 @@
 # Deploying `main.bicep` — runbook
 
-This is the first time anything in this repository is deployed to Azure. Every
-step before now was local and free. From here on, resources are real and the
-free-trial credit is being spent.
-
-Read the "One-way doors" section before running anything. Two of the choices
-already baked into the template cannot be undone for 90 days.
+This runbook was written before the first deployment and revised immediately
+after it. Steps are still written as instructions so the sequence can be
+repeated, but every expected value below is now an observed one.
 
 **Subscription**: Azure subscription 1 (`5900fbc9-a139-49ed-9987-ba560c147eb7`)
 **Signed in as**: ValerioQuaranta@Valvln.onmicrosoft.com
-**Template region default**: `westeurope`
+**Template region default**: `northeurope` — see "Region eligibility" below
+**First deployment**: `ai300-ml-workspace-001`, resource group
+`rg-ai300-test01`, succeeded in 69 seconds
+
+Read the "One-way doors" section before running anything. One of the choices
+baked into the template cannot be undone for 90 days.
 
 ---
 
@@ -17,7 +19,7 @@ already baked into the template cannot be undone for 90 days.
 
 ### 0.1 Register the resource providers
 
-All five providers this template needs are currently **NotRegistered** on this
+All five providers this template needs started out **NotRegistered** on this
 subscription. A deployment against an unregistered provider fails immediately
 with `MissingSubscriptionRegistration`.
 
@@ -30,8 +32,7 @@ for ns in Microsoft.Storage Microsoft.KeyVault Microsoft.OperationalInsights \
 done
 ```
 
-Registration is free and asynchronous — it takes a few minutes per provider.
-Wait until all five report `Registered`:
+Registration is free and asynchronous. Wait until all five report `Registered`:
 
 ```bash
 for ns in Microsoft.Storage Microsoft.KeyVault Microsoft.OperationalInsights \
@@ -41,24 +42,67 @@ for ns in Microsoft.Storage Microsoft.KeyVault Microsoft.OperationalInsights \
 done
 ```
 
+All five reached `Registered` in under a minute — faster than the "few minutes
+per provider" this runbook originally assumed. Registration is already done for
+this subscription and does not need repeating.
+
 **Portal equivalent**: Subscriptions → *Azure subscription 1* → Settings →
 Resource providers → search each namespace → Register.
 
-### 0.2 Create the resource group
+### 0.2 Region eligibility — check before anything else
 
-The subscription currently has no resource groups. Pick the name deliberately —
-see the 90-day trap below, because this name is an input to every generated
-resource name.
+**`westeurope` does not work on this subscription.** Every resource is rejected:
 
-```bash
-az group create --name rg-ai300-learning --location westeurope
+```text
+RequestDisallowedByAzure - Resource '...' was disallowed by Azure:
+The selected region is currently not accepting new customers:
+https://aka.ms/locationineligible
 ```
 
+This is a capacity restriction Azure applies to new subscriptions, not a fault
+in the template. It is why the template default is now `northeurope`.
+
+Confirmed by `what-if` against this subscription:
+
+| Region | Result |
+| --- | --- |
+| `westeurope` | blocked — not accepting new customers |
+| `northeurope` | OK — **in use** |
+| `swedencentral` | OK |
+| `italynorth` | OK |
+
+To re-test after changing anything, sweep candidate regions with `what-if`,
+which is free and creates nothing:
+
+```bash
+for r in northeurope swedencentral italynorth; do
+  out=$(az deployment group what-if --resource-group rg-ai300-test01 \
+          --template-file infra/main.bicep --parameters location=$r \
+          --no-pretty-print 2>&1)
+  echo "$out" | grep -q "RequestDisallowedByAzure" \
+    && printf "%-16s BLOCKED\n" "$r" || printf "%-16s ok\n" "$r"
+done
+```
+
+### 0.3 Create the resource group
+
+The name is an input to every generated resource name — see the 90-day trap
+below. `rg-ai300-test01` was chosen deliberately as a throwaway name so a
+redeploy can move to `-test02` without waiting out a soft-delete window.
+
+```bash
+az group create --name rg-ai300-test01 --location northeurope
+```
+
+The resource group's own location is only metadata — resources are created in
+whatever `location` the template resolves to. Keeping the two the same avoids
+having to explain the discrepancy later.
+
 **Portal equivalent**: Resource groups → Create → Subscription *Azure
-subscription 1*, Name `rg-ai300-learning`, Region *West Europe* → Review +
+subscription 1*, Name `rg-ai300-test01`, Region *North Europe* → Review +
 create.
 
-### 0.3 Rebuild and confirm the template still compiles
+### 0.4 Rebuild and confirm the template still compiles
 
 ```bash
 az bicep build --file infra/main.bicep
@@ -66,6 +110,12 @@ az bicep build --file infra/main.bicep
 
 Expect exit 0 and **no output**. Anything printed here is a finding — stop and
 resolve it before deploying.
+
+Note that compiling clean is necessary but not sufficient: the two defects found
+during the first deployment (see "Defects found on first deployment") both
+compiled without a single warning. Bicep type-checks the schema; it does not
+check resource-name length limits or region availability. Only `what-if` against
+the live subscription catches those.
 
 ---
 
@@ -89,22 +139,20 @@ recreating it **with the same name in the same subscription** produces the
 identical hash, therefore the identical vault name — which is still held by the
 soft-deleted, unpurgeable vault.
 
-**Consequence**: tear down `rg-ai300-learning` today and redeploy to
-`rg-ai300-learning` next week, and the deployment fails on the Key Vault. You
-would have to wait out the 90 days or choose a different resource group name.
+The hash depends only on subscription and resource group name. It does **not**
+depend on region, so changing region does not sidestep this.
 
-**Mitigations**, pick one before deploying:
+**Consequence**: tear down `rg-ai300-test01` today and redeploy to
+`rg-ai300-test01` next week, and the deployment fails on the Key Vault.
 
-- Accept it and commit to keeping this resource group name for the duration.
-- Use a throwaway resource group name for the first deployment (for example
-  `rg-ai300-test01`) so a redeploy can move to `-test02` without waiting.
+**Mitigation in force**: the throwaway resource group name. `ai300kv2mgou37pfmjou`
+is now held for 90 days after any teardown; a redeploy would use
+`rg-ai300-test02`, which hashes differently.
 
 ### Machine learning workspace soft-delete
 
 Azure ML workspaces are also subject to soft-delete, with the workspace name
-held for a retention period after deletion. Confirm the current behaviour and
-retention window for this subscription before relying on being able to reuse
-`ai300ml<hash>` immediately after a teardown. Treat workspace names the same way
+held for a retention period after deletion. Treat workspace names the same way
 as vault names: assume reuse is blocked for a while.
 
 ### Provider registration
@@ -116,31 +164,39 @@ harmless and free — noted only for completeness.
 
 ## 1. Dry run — `what-if`
 
-Never run the deployment before this. `what-if` resolves every expression and
-shows exactly what Azure will create, without creating anything.
+Never run the deployment before this. `what-if` resolves every expression
+against the live subscription and shows what Azure will create, without creating
+anything. It is also the only pre-deployment step that catches region
+ineligibility and invalid resource names.
 
 ```bash
 az deployment group what-if \
-  --resource-group rg-ai300-learning \
+  --resource-group rg-ai300-test01 \
   --template-file infra/main.bicep
 ```
 
 **What to check in the output**:
 
-| Check | Expected |
-| --- | --- |
-| Number of resources to `+ Create` | exactly 5 |
-| Container registry | absent from the whole output |
-| Any compute resource | absent |
-| ML workspace `sku` | `Basic` |
-| ML workspace `identity.type` | `SystemAssigned` |
-| `managedNetwork` on the workspace | inspect it — see the note below |
+| Check | Expected | First run |
+| --- | --- | --- |
+| Number of resources to `+ Create` | exactly 5 | ✅ 5 |
+| Container registry | absent from the whole output | ✅ absent |
+| Any compute resource | absent | ✅ absent |
+| ML workspace `sku` | `Basic` / `Basic` | ✅ |
+| ML workspace `identity.type` | `SystemAssigned` | ✅ |
+| `managedNetwork.isolationMode` | `Disabled` | ✅ |
 
-**On `managedNetwork`**: the template leaves this property unset, so the service
-default applies, and this dry run is the first time that default is visible.
-Managed network isolation can provision billable infrastructure. If `what-if`
-shows an isolation mode other than disabled, stop and decide deliberately before
-deploying.
+**On `managedNetwork`**: an earlier version of this runbook expected `what-if`
+to reveal the service default for this property. It does not. `what-if` renders
+what the template declares plus what it can resolve; defaults applied by the
+resource provider at creation time are invisible to it, so leaving the property
+unset means going in blind.
+
+That is why the template now declares `isolationMode: 'Disabled'` explicitly.
+The property shows up in `what-if` because it is declared, not because the
+service revealed anything. The stake is real: `AllowOnlyApprovedOutbound`
+provisions a managed Azure Firewall billed hourly regardless of use, which would
+dominate the cost of everything else here combined.
 
 **Portal equivalent**: there is no true `what-if` in the portal deployment
 blade. It validates the template and shows a Review page, which is weaker. Run
@@ -152,7 +208,7 @@ blade. It validates the template and shows a Review page, which is weaker. Run
 
 ```bash
 az deployment group create \
-  --resource-group rg-ai300-learning \
+  --resource-group rg-ai300-test01 \
   --template-file infra/main.bicep \
   --name ai300-ml-workspace-001
 ```
@@ -160,7 +216,8 @@ az deployment group create \
 Naming the deployment (`--name`) makes it addressable afterwards; without it you
 get a timestamped name that is awkward to reference.
 
-Expect this to take several minutes — the ML workspace is the slow part.
+The first run took **69 seconds** — faster than the "several minutes" originally
+expected.
 
 ### Portal equivalent
 
@@ -172,7 +229,7 @@ locally.
 2. **Build your own template in the editor**
 3. **Load file** → select `infra/main.json`
 4. **Save**
-5. Subscription *Azure subscription 1*, Resource group `rg-ai300-learning`
+5. Subscription *Azure subscription 1*, Resource group `rg-ai300-test01`
 6. Leave every parameter at its default — they generate the names
 7. **Review + create** → **Create**
 
@@ -187,31 +244,90 @@ after every template change.
 ```bash
 # Deployment succeeded and produced the expected outputs
 az deployment group show \
-  --resource-group rg-ai300-learning \
+  --resource-group rg-ai300-test01 \
   --name ai300-ml-workspace-001 \
   --query "{state:properties.provisioningState, outputs:properties.outputs}"
 
 # Exactly 5 resources, and nothing unexpected alongside them
-az resource list --resource-group rg-ai300-learning \
-  --query "[].{name:name, type:type}" -o table
+az resource list --resource-group rg-ai300-test01 \
+  --query "[].{name:name, type:type, location:location}" -o table
 
-# The managed identity now has a real principal id — this is what future role
-# assignments attach to
-az ml workspace show --resource-group rg-ai300-learning \
-  --name "$(az deployment group show -g rg-ai300-learning \
-             -n ai300-ml-workspace-001 \
-             --query properties.outputs.workspaceName.value -o tsv)" \
-  --query identity 2>/dev/null \
-  || echo "az ml extension not installed - use the portal or 'az resource show'"
+# The three properties that carry cost or security consequences
+az resource show \
+  --resource-group rg-ai300-test01 \
+  --name ai300ml2mgou37pfmjou \
+  --resource-type Microsoft.MachineLearningServices/workspaces \
+  --api-version 2026-05-01 \
+  --query "{identity:identity, managedNetwork:properties.managedNetwork, \
+            containerRegistry:properties.containerRegistry}"
 ```
 
 **The check that matters most**: `az resource list` must return **5** rows. If a
 container registry appears, the workspace provisioned one despite the template —
 investigate before doing anything else, because that is a recurring charge.
 
-**Portal equivalent**: Resource group `rg-ai300-learning` → Overview lists the
+### Observed on the first deployment
+
+| Resource | Name |
+| --- | --- |
+| Storage account | `ai300st2mgou37pfmjou` |
+| Key Vault | `ai300kv2mgou37pfmjou` |
+| Log Analytics workspace | `ai300law2mgou37pfmjou` |
+| Application Insights | `ai300appi2mgou37pfmjou` |
+| ML workspace | `ai300ml2mgou37pfmjou` |
+
+- `containerRegistry: null` — nothing was provisioned behind the template's back
+- `managedNetwork.isolationMode: "Disabled"`, `enableFirewallLog: false` — no
+  managed firewall
+- `identity.principalId: 85e8321f-1e51-42cb-8ced-7fca9b51498b` — future role
+  assignments attach to this
+- `changeableIsolationModes: [AllowInternetOutbound, AllowOnlyApprovedOutbound]`
+  — `Disabled` is not a dead end; either isolation mode can still be adopted
+
+**Portal equivalent**: Resource group `rg-ai300-test01` → Overview lists the
 resources; Settings → Deployments → `ai300-ml-workspace-001` → Outputs shows the
 four output values.
+
+---
+
+## Defects found on first deployment
+
+Both were latent in a template that compiled cleanly and had passed CI. Neither
+was reachable without deploying against a live subscription.
+
+### Storage account name exceeded the 24-character cap
+
+`ai300storage` (12) + `uniqueString()` (13) = 25 characters, against a hard cap
+of 24:
+
+```text
+AccountNameInvalid - ai300storage2mgou37pfmjou is not a valid storage account
+name. Storage account name must be between 3 and 24 characters in length and
+use numbers and lower-case letters only.
+```
+
+Fixed by shortening the prefix to `ai300st` (20 characters total), matching the
+abbreviated convention already used by the other four resources.
+
+Why it survived review: `research.md` R5 checked the length of the **ML
+workspace** name (20 characters, within its 3–33 limit) and generalised from
+there. The storage account has the tightest limit of the five and was never
+checked against it. Bicep does not validate name length, and the `westeurope`
+rejection fired first and masked the error.
+
+Current margins, worth re-checking whenever a prefix changes:
+
+| Resource | Prefix | Total | Limit |
+| --- | --- | --- | --- |
+| Storage account | `ai300st` | 20 | 24 |
+| Key Vault | `ai300kv` | 20 | 24 |
+| Log Analytics | `ai300law` | 21 | 63 |
+| Application Insights | `ai300appi` | 22 | 260 |
+| ML workspace | `ai300ml` | 20 | 33 |
+
+### `managedNetwork` was left to an unseen service default
+
+Covered in section 1. Now declared explicitly.
 
 ---
 
@@ -229,7 +345,7 @@ resources carries a fixed monthly fee:
 | ML workspace (`Basic`) | no charge for the workspace itself | free |
 
 **Verify rather than trust this table.** Check Cost Management → Cost analysis
-after 24–48 hours, filtered to `rg-ai300-learning`. A number that is not
+after 24–48 hours, filtered to `rg-ai300-test01`. A number that is not
 approximately zero means something was provisioned that this template did not
 declare.
 
@@ -246,18 +362,20 @@ unattended.
 Deleting the resource group removes the billable surface in one command:
 
 ```bash
-az group delete --name rg-ai300-learning --yes --no-wait
+az group delete --name rg-ai300-test01 --yes --no-wait
 ```
 
 **But re-read the one-way doors first.** After this runs:
 
-- The Key Vault is soft-deleted with purge protection, holding its name for 90
-  days. Recreating a resource group with the same name will collide.
+- The Key Vault is soft-deleted with purge protection, holding
+  `ai300kv2mgou37pfmjou` for 90 days. Recreating `rg-ai300-test01` will collide;
+  use `rg-ai300-test02`.
 - The ML workspace name is likewise held for its retention window.
 
 ```bash
 # Inspect what is being held after a teardown
-az keyvault list-deleted --query "[].{name:name, purgeDate:properties.scheduledPurgeDate}" -o table
+az keyvault list-deleted \
+  --query "[].{name:name, purgeDate:properties.scheduledPurgeDate}" -o table
 ```
 
 **Portal equivalent**: Resource group → Delete resource group → type the name to
@@ -268,12 +386,13 @@ vaults.
 
 ## Summary checklist
 
-- [ ] Five resource providers report `Registered`
-- [ ] Resource group created, name chosen with the 90-day trap in mind
-- [ ] `az bicep build` exits 0 with no output
-- [ ] `what-if` shows 5 creates, no container registry, no compute
-- [ ] `managedNetwork` default inspected and accepted
-- [ ] Deployment succeeded
-- [ ] `az resource list` returns exactly 5 resources
+- [x] Five resource providers report `Registered`
+- [x] Target region confirmed eligible (`westeurope` is not)
+- [x] Resource group created, name chosen with the 90-day trap in mind
+- [x] `az bicep build` exits 0 with no output
+- [x] `what-if` shows 5 creates, no container registry, no compute
+- [x] `managedNetwork` declared explicitly rather than inherited
+- [x] Deployment succeeded
+- [x] `az resource list` returns exactly 5 resources
 - [ ] Cost analysis checked after 24–48 hours
-- [ ] Teardown plan decided before walking away
+- [x] Teardown plan decided before walking away
