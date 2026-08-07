@@ -65,6 +65,17 @@ under the template's ownership.
   shows the same operation failing when the permission is withheld. A command
   authenticated as the author proves nothing, because the author's own authority
   would carry it either way.
+- Q: The dry run revealed that the system data stores authenticate with account
+  keys, not with the identity — invalidating the reason written for keeping the
+  storage permission. How to proceed? → A: Switch them to identity-based
+  authentication and declare it in the template. Keys stop being used, the
+  permission becomes genuinely load-bearing, and the reduction stops depending
+  on a false premise. This modifies a deployed resource, so FR-009 is amended
+  with a named exception rather than silently stretched.
+- Q: Should the platform be stopped from re-granting resource-group authority?
+  → A: Yes — declare the setting that controls it, rather than deleting the
+  grant by hand and hoping it stays deleted. It also settles the question the
+  Edge Cases had left to observation.
 - Q: What happens if verification shows the workspace lost something it needed?
   → A: Restore the missing permission immediately using the recorded reversal,
   record which operation failed and which permission covered it, and stop for
@@ -287,8 +298,20 @@ or work it out.
   pasted in from the live environment.
 - **FR-008**: The template MUST contain no literal subscription, tenant, or
   resource group identifier.
-- **FR-009**: This feature MUST NOT declare any new Azure resource, and MUST NOT
-  modify the configuration of any of the five resources already deployed.
+- **FR-009**: This feature MUST NOT declare any new Azure resource. It MUST NOT
+  modify the configuration of the already-deployed resources, **with two named
+  exceptions on the workspace itself**, both authorized by the author on
+  2026-08-07 after the dry run revealed them:
+  - the mode by which the workspace's system data stores authenticate, changed
+    from account keys to its own identity — without which the least-privilege
+    reduction would remove a permission the workspace still relies on;
+  - the setting that lets the platform grant this identity authority over the
+    whole resource group, turned off — the supported way to stop the platform
+    re-granting what this feature removes.
+
+  Both are changes this feature exists to make possible, not incidental drift.
+  No other property of any resource may change, and no resource may be added or
+  removed.
 - **FR-010**: This feature MUST NOT introduce any secret, key, or connection
   string, and MUST NOT weaken the identity-based access model already in place.
 - **FR-011**: This feature MUST NOT grant permissions to any principal other
@@ -341,12 +364,18 @@ reading the change and forming a judgement.
 - **SC-001**: The local template build completes with zero errors and zero
   warnings.
 - **SC-002**: The dry run against the live environment shows **exactly two
-  entries, both of them permission grants to be created**. It reports nothing to
-  delete, nothing to modify, and nothing of any other kind to create. The
-  criterion is about *which kinds* of entry appear, not about the count being
-  zero: a permission grant is itself a resource in the dry run's output, so a
-  criterion demanding zero creations could never pass on a change whose entire
-  purpose is to declare two of them.
+  entries to create, both of them permission grants**, nothing to delete, and no
+  resource change beyond those reported by a **control run** — the same dry run
+  against the previous, unchanged template.
+
+  The control is what makes this checkable. A dry run of the *unchanged,
+  already-deployed* template reports two resources to modify, because the
+  template declares a subset of the properties the provider maintains and the
+  tool renders the rest as removals. Its own output warns that results may
+  contain false positives. A criterion demanding "nothing to modify" is
+  therefore unsatisfiable by any template here, and would have failed a correct
+  change. What must be zero is the *difference* this feature introduces, not the
+  absolute count.
 - **SC-003**: After deployment, enumerating the permissions held by the
   workspace identity returns **zero** grants scoped to the resource group or
   above.
@@ -363,10 +392,23 @@ reading the change and forming a judgement.
   observed to fail when the permission it depends on is withheld. A command
   authenticated as the author does not satisfy this criterion: it would pass
   whether or not the identity retained any permission at all.
-- **SC-007**: After deployment, the environment still contains exactly the same
-  five resources, with the same names, as before the change.
+- **SC-007**: After deployment, the environment contains exactly the same
+  resources, with the same names, as the inventory captured before the change —
+  nothing added, nothing removed.
+
+  The reference is the captured baseline, not a fixed count. Feature 001 recorded
+  five resources; the inventory taken at the start of this feature found **six**.
+  The extra one is a notification group the platform created by itself ten
+  minutes after the workspace, which no template declares. It carries no charge,
+  it is outside this feature's scope to remove (FR-009 forbids touching the
+  deployed resources), and it is recorded here because a criterion that named the
+  number five would now fail for a reason having nothing to do with this change.
 - **SC-008**: Redeploying the unchanged template a second time produces a dry
-  run reporting no change whatsoever.
+  run reporting **no permission grant to create** and no change beyond the
+  control run's. The two declared grants must show as unchanged, proving their
+  names are derived deterministically rather than regenerated. As with SC-002,
+  the persistent property noise is measured against the control, not required to
+  be absent.
 - **SC-009**: The recurring cost added by this feature is **$0**. Permission
   grants are control-plane metadata and are not billed, and no resource changes
   its service tier.

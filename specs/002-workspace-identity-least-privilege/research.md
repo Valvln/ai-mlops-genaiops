@@ -61,8 +61,34 @@ The workspace created four datastores of its own accord:
 | `workspacefilestore` | **file share** | none |
 | `workspaceworkingdirectory` | **file share** | none |
 
-**All four carry `credentials: {}`** — they are identity-based. Nothing reaches
-this storage with a stored key; access is authorised as the workspace identity.
+**All four carry `credentials: {}`** in the datastore listing.
+
+> ### ⚠️ Correction, 2026-08-07 — this finding was wrong
+>
+> `credentials: {}` means the tool does not return the secret, **not** that no
+> secret is used. The workspace itself reports
+> `systemDatastoresAuthMode: "accesskey"`: the system datastores authenticate
+> with **account keys**, not with the managed identity.
+>
+> It surfaced only because the dry run listed the property among those the
+> template would reset. Reading the datastores was not enough; the workspace's
+> own configuration had to be read too.
+>
+> **What it invalidated**: the justification written for keeping blob data
+> access — "the only way the service can reach its own artifacts" — was false.
+> The service reached them with keys, which need `listKeys` on the storage
+> account: a control-plane action that lived inside the resource-group grant
+> this feature removes. Removing that grant while leaving key mode in place
+> would very likely have broken the system datastores.
+>
+> **Decision taken by the author**: declare `systemDatastoresAuthMode: 'identity'`
+> in the template. Keys stop being used at all, blob data access becomes
+> genuinely load-bearing, and the justification becomes true rather than merely
+> written down. The cost is that this feature now modifies a deployed resource —
+> see the amendment to FR-009.
+>
+> **The lesson worth keeping**: a field that is empty in one tool's output is not
+> evidence of absence. This one held up an entire plan.
 
 Two consequences:
 

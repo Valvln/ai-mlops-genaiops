@@ -49,8 +49,8 @@ compute.
 
 **Purpose**: tooling and a place to keep evidence
 
-- [ ] T001 Confirm `az` is reachable and the ML extension is present: `export PATH="/usr/local/bin:$PATH"` then `az extension add --name ml --yes` (already installed at version 2.44.1 during planning; the command is idempotent)
-- [ ] T002 Create the evidence directory `specs/002-workspace-identity-least-privilege/evidence/` and add it to `.gitignore` if command output is to be kept out of the repository, or decide to paste findings into the task notes instead
+- [x] T001 Confirm `az` is reachable and the ML extension is present: `export PATH="/usr/local/bin:$PATH"` then `az extension add --name ml --yes` (already installed at version 2.44.1 during planning; the command is idempotent)
+- [x] T002 Create the evidence directory `specs/002-workspace-identity-least-privilege/evidence/` and add it to `.gitignore` if command output is to be kept out of the repository, or decide to paste findings into the task notes instead
 
 ---
 
@@ -62,9 +62,9 @@ compute.
 assignment names captured in T003 are the only way to address the grants for
 deletion, and they cease to exist once deleted.
 
-- [ ] T003 Capture the four current grants **with their assignment names** into `specs/002-workspace-identity-least-privilege/evidence/grants-before.json` using the baseline command in [quickstart.md](quickstart.md); confirm the result contains exactly 4 entries
-- [ ] T004 [P] Capture the service-side baseline into `evidence/diagnose-before.json` via `az ml workspace diagnose`; confirm every result array is empty
-- [ ] T005 [P] Capture the resource inventory into `evidence/resources-before.txt` via `az resource list -g rg-ai300-test01`; confirm it lists exactly 5 resources
+- [x] T003 Capture the four current grants **with their assignment names** into `specs/002-workspace-identity-least-privilege/evidence/grants-before.json` using the baseline command in [quickstart.md](quickstart.md); confirm the result contains exactly 4 entries
+- [x] T004 [P] Capture the service-side baseline into `evidence/diagnose-before.json` via `az ml workspace diagnose`; confirm every result array is empty
+- [x] T005 [P] Capture the resource inventory into `evidence/resources-before.txt` via `az resource list -g rg-ai300-test01`. **Observed: 6, not the 5 feature 001 recorded** — the extra one is a platform-created notification group (`microsoft.insights/actiongroups`, "Application Insights Smart Detection", created 2026-08-07 17:06, no charge). The captured inventory is the reference for SC-007, not a fixed count
 - [x] T006 **Author decision required** — settle the open question in [research.md](research.md) R6: whether the vault grant is secret **read** (proposed) or secret **write**. **Done 2026-08-07: secret read (Key Vault Secrets User)**, taken deliberately on incomplete evidence; the unverified inference and the widening path are recorded in `research.md` R6
 
 **Checkpoint**: the baseline is recorded, the vault role is decided, and every
@@ -79,10 +79,10 @@ grant can still be addressed by name.
 **Independent Test**: read the recorded reversal and confirm every step is a
 command that runs as written, with no step that says to look something up.
 
-- [ ] T007 [US4] Add a "Workspace identity permissions" section to `infra/DEPLOY.md` recording what the identity held before this feature, what each of the four grants allowed, and why three of them are being removed
-- [ ] T008 [US4] Add the reversal to that section of `infra/DEPLOY.md`: one restore command per removed grant, copied from [contracts/role-assignments.md](contracts/role-assignments.md), using `--assignee-object-id` with an explicit principal type rather than `--assignee`
-- [ ] T009 [US4] Add to that section the table of expected future failures from [quickstart.md](quickstart.md) — which capability will break, and which grant restores it — so a later failure is recognised rather than diagnosed
-- [ ] T010 [US4] Verify the reversal satisfies SC-010: count the removals (3) and the restore commands, and confirm the counts match and that no command depends on a value not written down
+- [x] T007 [US4] Add a "Workspace identity permissions" section to `infra/DEPLOY.md` recording what the identity held before this feature, what each of the four grants allowed, and why three of them are being removed
+- [x] T008 [US4] Add the reversal to that section of `infra/DEPLOY.md`: one restore command per removed grant, copied from [contracts/role-assignments.md](contracts/role-assignments.md), using `--assignee-object-id` with an explicit principal type rather than `--assignee`
+- [x] T009 [US4] Add to that section the table of expected future failures from [quickstart.md](quickstart.md) — which capability will break, and which grant restores it — so a later failure is recognised rather than diagnosed
+- [x] T010 [US4] Verify the reversal satisfies SC-010: count the removals (3) and the restore commands, and confirm the counts match and that no command depends on a value not written down
 
 **Checkpoint**: every removal in this feature is now reversible from the runbook
 alone. Removals may begin.
@@ -96,10 +96,10 @@ alone. Removals may begin.
 **Independent Test**: read `infra/main.bicep` and enumerate the permissions it
 declares; the set matches what the identity holds.
 
-- [ ] T011 [US2] Add the two role definition variables to `infra/main.bicep` using `subscriptionResourceId`, exactly as specified in [contracts/role-assignments.md](contracts/role-assignments.md) — no literal subscription identifier
-- [ ] T012 [US2] Add the two role assignment resources to `infra/main.bicep` at API version `2022-04-01`, each with `scope` set to the resource symbol, `name` derived by `guid()`, `principalId` from `mlWorkspace.identity.principalId`, and `principalType: 'ServicePrincipal'`
-- [ ] T013 [US2] Validate compilation: `az bicep build --file infra/main.bicep` must exit 0 with **no output** (SC-001). Any warning is a finding — stop and resolve it before continuing
-- [ ] T014 [US2] Dry run **before touching the live environment**: `az deployment group what-if -g rg-ai300-test01 --template-file infra/main.bicep`. Confirm exactly 2 role assignments to create, nothing else to create, nothing to delete, nothing to modify (SC-002). Save the output to `evidence/what-if-before-deploy.txt`. Running this first means a template problem is found before any permission has been removed
+- [x] T011 [US2] Add the two role definition variables to `infra/main.bicep` using `subscriptionResourceId`, exactly as specified in [contracts/role-assignments.md](contracts/role-assignments.md) — no literal subscription identifier
+- [x] T012 [US2] Add the two role assignment resources to `infra/main.bicep` at API version `2022-04-01`, each with `scope` set to the resource symbol, `name` derived by `guid()`, `principalId` from `mlWorkspace.identity.principalId`, and `principalType: 'ServicePrincipal'`
+- [x] T013 [US2] Validate compilation: `az bicep build --file infra/main.bicep` must exit 0 with **no output** (SC-001). Any warning is a finding — stop and resolve it before continuing
+- [x] T014 [US2] Dry run **before touching the live environment**: `az deployment group what-if -g rg-ai300-test01 --template-file infra/main.bicep`. Confirm exactly 2 role assignments to create, nothing else to create, nothing to delete, nothing to modify (SC-002). Save the output to `evidence/what-if-before-deploy.txt`. Running this first means a template problem is found before any permission has been removed
 - [ ] T015 [US2] Delete the platform's blob grant (C2) per [contracts/role-assignments.md](contracts/role-assignments.md). **This opens the only permission gap in the feature — do not stop here**
 - [ ] T016 [US2] Deploy: `az deployment group create -g rg-ai300-test01 --template-file infra/main.bicep --name ai300-rbac-002`. The blob gap closes here
 - [ ] T017 [US2] Confirm idempotence (SC-008): re-run the dry run with no edits and confirm it reports no change whatsoever
