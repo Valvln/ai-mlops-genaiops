@@ -30,3 +30,7 @@ infra/main.json
 
 # Spec Kit workflow state: local progress tracking, not source of truth
 specs/**/.spec-context.json
+
+# Personal study material: exam notes, flashcards, progress tracker.
+# Kept out of the repo deliberately - see the "*.local.md" convention.
+*.local.md
