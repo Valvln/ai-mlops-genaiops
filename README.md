@@ -132,65 +132,15 @@ different claims.
 
 ### What the workspace identity taught me — a feature that failed
 
-I then tried to do the obvious next thing: give that managed identity only the
-permissions it actually needs, and declare them in the template. It did not work,
-and I am keeping the whole attempt in the repository because the reason it did
-not work is worth more than the feature would have been.
+Let's name the failure upfront: I tried to shrink a managed identity down to only what it needed. I did not succeed — and I am keeping the attempt in the repository, because the reason it failed is worth more than the feature would have been.
 
-The first surprise came before I wrote any code. The identity already held four
-role assignments that appear in no template — the platform grants them when the
-workspace is created. One of them covered the entire resource group: wildcard
-control over the vault and the storage account, plus the ability to create
-container registries. So the work was never "grant the minimum"; it was "take
-away what was granted behind my back".
+The identity already held four role assignments no template had ever declared, one of them a wildcard grant over the whole resource group. So the task was never "grant the minimum"; it was "take back what had been granted without asking."
 
-Two of my assumptions were wrong, and each was caught by a different check.
+Two assumptions fell apart along the way. Empty credentials, I learned, mean the tool hides them — not that the data stores don't use them. And one of my success criteria could never have passed: even the old, already-deployed template showed changes on a clean run. Comparing against that baseline before trusting any result is the one habit worth keeping.
 
-- **I concluded the data stores were identity-based** because their credentials
-  field came back empty. It is empty because the tool does not return secrets,
-  not because there are none. The workspace itself reported
-  `systemDatastoresAuthMode: accesskey`. The justification I had written for
-  keeping the storage permission was simply false, and removing the
-  resource-group grant would have taken `listKeys` with it and broken the data
-  stores. I found this only because `what-if` listed the property among those my
-  template would reset.
-- **Two of my success criteria could not have passed.** I had written "the dry
-  run reports nothing to modify". Then I ran the dry run against the *previous*
-  template — unchanged, already deployed — and it reported two resources to
-  modify as well. The noise was pre-existing, and my criterion was unsatisfiable
-  by any template. I rewrote both criteria to measure the difference against that
-  control run. Running the control is the technique I want to keep.
+Then the real lesson. I removed the platform's grant; it quietly recreated it under a new name. I told it to stop assigning permission at the resource-group level; it obeyed the letter and split one broad grant into three narrow ones — same authority, better disguised. One of my checks turned green on exactly that outcome, because it was only ever reading a word in a scope string, not the reach it claimed to measure. A test can pass while the thing it exists to guarantee never happens.
 
-Then the actual finding. I deleted the platform's storage grant, and the platform
-recreated it — under a new name, within the same deployment, seconds later. My
-template's declaration of that same permission was rejected as a duplicate and
-the deployment failed. I also set `allowRoleAssignmentOnRG: false`, expecting it
-to reduce the identity's reach; instead the platform removed its one
-resource-group-scoped grant and created three identical ones, one per resource.
-The authority was unchanged. Only its shape was.
-
-The part I keep coming back to is that **one of my success criteria passed
-anyway**. "No grant scoped above a single resource" returns zero, verifiably,
-by command — because the platform had relocated the same authority onto three
-individual resources. I had written that criterion to mean "the identity's reach
-is narrow", and what it actually measured was whether the word `resourceGroups`
-appears in a scope string. A check can be green while the thing it exists to
-guarantee has not happened at all. I would rather have learned that here than in
-an exam question.
-
-So the conclusion is a negative one: while the workspace uses a *system-assigned*
-identity, its permissions are not mine to reduce — the platform maintains them
-and restores what I remove. The direction worth trying next is a *user-assigned*
-identity, which the platform does not create and may not auto-grant to. I have
-written that down as an untested hypothesis, not as a finding, because I have not
-tested it.
-
-What the attempt did leave behind: the data stores now authenticate with the
-workspace identity instead of account keys, the runbook documents what the
-identity can do and why I cannot change it, and the environment is exactly as
-healthy as it was before. Cost added: nothing — role assignments are
-control-plane metadata, and Cost Management confirms the whole resource group is
-still at zero.
+The honest conclusion is negative: these permissions are the platform's to manage, not mine to trim. What's worth trying next is a user-assigned identity — written down as a question, not an answer. What the attempt did leave behind is real: the workspace now authenticates through its own identity instead of account keys, the reasoning is on record for whoever reads this next, and it cost nothing to learn.
 
 ### `.github/workflows/` — continuous validation
 
