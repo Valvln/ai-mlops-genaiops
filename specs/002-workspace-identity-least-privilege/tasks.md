@@ -22,6 +22,11 @@ explained below.
 - **[Story]**: which user story the task serves (US1–US4)
 - Every task names the file it changes or the artifact it produces
 
+**Status markers**: `[x]` done · `[ ]` not started · `[~]` **superseded** — the
+task was made pointless or impossible by what the attempt revealed, and its
+original text is kept after the marker so the record shows what was intended.
+Eleven tasks are in that state; the reason is [research.md](research.md) R10.
+
 ## Cost
 
 **Zero.** Every task is either a local file edit, a read against Azure, or a
@@ -100,9 +105,9 @@ declares; the set matches what the identity holds.
 - [x] T012 [US2] Add the two role assignment resources to `infra/main.bicep` at API version `2022-04-01`, each with `scope` set to the resource symbol, `name` derived by `guid()`, `principalId` from `mlWorkspace.identity.principalId`, and `principalType: 'ServicePrincipal'`
 - [x] T013 [US2] Validate compilation: `az bicep build --file infra/main.bicep` must exit 0 with **no output** (SC-001). Any warning is a finding — stop and resolve it before continuing
 - [x] T014 [US2] Dry run **before touching the live environment**: `az deployment group what-if -g rg-ai300-test01 --template-file infra/main.bicep`. Confirm exactly 2 role assignments to create, nothing else to create, nothing to delete, nothing to modify (SC-002). Save the output to `evidence/what-if-before-deploy.txt`. Running this first means a template problem is found before any permission has been removed
-- [ ] T015 [US2] Delete the platform's blob grant (C2) per [contracts/role-assignments.md](contracts/role-assignments.md). **This opens the only permission gap in the feature — do not stop here**
-- [ ] T016 [US2] Deploy: `az deployment group create -g rg-ai300-test01 --template-file infra/main.bicep --name ai300-rbac-002`. The blob gap closes here
-- [ ] T017 [US2] Confirm idempotence (SC-008): re-run the dry run with no edits and confirm it reports no change whatsoever
+- [x] T015 [US2] Delete the platform's blob grant (C2). **Done — and the platform recreated it under a new name within seconds** (research.md R10). The gap never stayed open; it closed by the platform's action, not by the deployment
+- [x] T016 [US2] Deploy. **First attempt FAILED with `RoleAssignmentExists`**: the platform's recreated blob grant conflicted with the template's. The template was corrected to stop declaring blob access, and `ai300-rbac-002b` then succeeded in 41s
+- [x] T017 [US2] Confirm idempotence. **Partial**: the declared grant keeps its derived name across redeployment, but the dry run renders its unresolved `reference()` for principalId as a difference — tool noise, not a change
 
 **Checkpoint**: both surviving permissions are declared and owned by the
 template. The identity now holds five grants — two declared, three still to be
@@ -118,13 +123,13 @@ nothing confers authority no need can be named for.
 **Independent Test**: enumerate the identity's permissions and confirm none is
 scoped to the resource group or above.
 
-- [ ] T018 [US1] Delete the key vault administration grant (C4). The declared secret grant already covers the vault, so this opens no gap
-- [ ] T019 [US1] Delete the file share grant (C3). **This is the riskiest removal in the feature** — the two file datastores exist today and become unusable by the service until it is re-granted. Confirm the reversal from T008 is in place before running it
-- [ ] T020 [US1] Delete the resource-group-wide grant (C1) — the point of the feature
-- [ ] T021 [US1] Confirm SC-003: enumerating the identity's grants returns none scoped to the resource group or above
-- [ ] T022 [US1] Confirm SC-004: the identity holds exactly 2 grants, and they are exactly the 2 the template declares — no more, no fewer
-- [ ] T023 [US1] Confirm SC-005: inspect the two role definitions and verify neither confers wildcard authority over a resource type, the ability to create or delete resources, or the ability to change the access configuration of its resource
-- [ ] T024 [US1] Confirm SC-007: `az resource list -g rg-ai300-test01` still returns the same 5 resources with the same names as `evidence/resources-before.txt`
+- [~] T018 [US1] **SUPERSEDED by R10** (the vault administration grant is the platform's and is recreated on deletion). Original: Delete the key vault administration grant (C4). The declared secret grant already covers the vault, so this opens no gap
+- [~] T019 [US1] **SUPERSEDED by R10** (the file share grant is the platform's and is recreated on deletion). Original: Delete the file share grant (C3). **This is the riskiest removal in the feature** — the two file datastores exist today and become unusable by the service until it is re-granted. Confirm the reversal from T008 is in place before running it
+- [~] T020 [US1] **SUPERSEDED by R10** (the resource-group grant was removed by `allowRoleAssignmentOnRG: false`, and the platform replaced it with three resource-scoped grants of the same role). Original: Delete the resource-group-wide grant (C1) — the point of the feature
+- [~] T021 [US1] **SUPERSEDED by R10** (**passes, and is misleading** — no grant sits above a single resource because the platform relocated the same authority onto three resources). Original: Confirm SC-003: enumerating the identity's grants returns none scoped to the resource group or above
+- [~] T022 [US1] **SUPERSEDED by R10** (**fails** — seven grants held, one declared). Original: Confirm SC-004: the identity holds exactly 2 grants, and they are exactly the 2 the template declares — no more, no fewer
+- [~] T023 [US1] **SUPERSEDED by R10** (**fails** — the platform's grants confer wildcard authority and access governance). Original: Confirm SC-005: inspect the two role definitions and verify neither confers wildcard authority over a resource type, the ability to create or delete resources, or the ability to change the access configuration of its resource
+- [x] T024 [US1] Confirm SC-007: `az resource list -g rg-ai300-test01` still returns the same 5 resources with the same names as `evidence/resources-before.txt`
 
 **Checkpoint**: the reduction is complete and the permissions are as intended.
 Whether the workspace still works is not yet known — that is Phase 6.
@@ -142,12 +147,12 @@ operation is seen to fail when its permission is withheld.
 command run by hand succeeds regardless of what the identity can do. A passing
 result means nothing until the negative control shows the check can fail.
 
-- [ ] T025 [US3] Run `az ml workspace diagnose` and compare against `evidence/diagnose-before.json`; save to `evidence/diagnose-after.json`
-- [ ] T026 [US3] Run the negative control required by FR-004a **once per declared grant**, because SC-006 asks for proof against the storage account *and* the secret store. For each of the two: delete the declared grant, re-run `diagnose`, record whether the matching result array (`storageAccountResults` for blob, `keyVaultResults` for the vault) becomes non-empty, then redeploy the template to restore it and confirm the probe is clean again. **Restoring is not optional, and is done before moving to the next grant** (SC-011)
-- [ ] T027 [US3] Record a verdict **per permission**, not one verdict for both. For each: if the probe reported a problem while the grant was absent, the probe is sensitive to it and that half of SC-006 is satisfied. If it stayed clean, `diagnose` does not test that permission — **report that half as unverified with the reason**, and do not substitute a command that appears to prove the point without doing so. **SC-006 is satisfied only if both halves are.** The vault half is the more likely of the two to come back unverifiable: with no credential-carrying datastore or connection in existence, there may be no operation at this stage that makes the service read a secret at all — which is precisely the case FR-004a says to report as a limit rather than paper over
-- [ ] T028 [US3] Run `az ml workspace sync-keys` as the control-plane probe. If it fails, record it as a finding — **do not treat it as an FR-016 trigger**. Nothing in this project consumes it, and under FR-004 a capability with no consumer does not justify a permission
-- [ ] T029 [US3] If any verification shows the workspace lost something it actually needs, apply FR-016: restore the permission immediately from the T008 reversal, record which operation failed and which grant covered it, and **stop for the author to decide**. Do not re-grant and then write the justification to match
-- [ ] T030 [US3] Confirm SC-011 **and re-confirm SC-008 on the final state**: as the last action, re-run both the dry run and the verification. T017 established idempotence *before* the three removals and *before* the negative control deleted and recreated a grant, so it says nothing about the state this feature actually leaves behind — in particular, a grant recreated by T026 must carry the same deterministic name as the one it replaced, or the dry run will want to create it again. The dry run must report no change of any kind, the two grants must still be exactly two, and no permission gap may be left open
+- [~] T025 [US3] **SUPERSEDED by R10** (not reached: the reduction it was to verify did not happen). Original: Run `az ml workspace diagnose` and compare against `evidence/diagnose-before.json`; save to `evidence/diagnose-after.json`
+- [~] T026 [US3] **SUPERSEDED by R10** (not reached, same reason). Original: Run the negative control required by FR-004a **once per declared grant**, because SC-006 asks for proof against the storage account *and* the secret store. For each of the two: delete the declared grant, re-run `diagnose`, record whether the matching result array (`storageAccountResults` for blob, `keyVaultResults` for the vault) becomes non-empty, then redeploy the template to restore it and confirm the probe is clean again. **Restoring is not optional, and is done before moving to the next grant** (SC-011)
+- [~] T027 [US3] **SUPERSEDED by R10** (not reached, same reason). Original: Record a verdict **per permission**, not one verdict for both. For each: if the probe reported a problem while the grant was absent, the probe is sensitive to it and that half of SC-006 is satisfied. If it stayed clean, `diagnose` does not test that permission — **report that half as unverified with the reason**, and do not substitute a command that appears to prove the point without doing so. **SC-006 is satisfied only if both halves are.** The vault half is the more likely of the two to come back unverifiable: with no credential-carrying datastore or connection in existence, there may be no operation at this stage that makes the service read a secret at all — which is precisely the case FR-004a says to report as a limit rather than paper over
+- [~] T028 [US3] **SUPERSEDED by R10** (not reached, same reason). Original: Run `az ml workspace sync-keys` as the control-plane probe. If it fails, record it as a finding — **do not treat it as an FR-016 trigger**. Nothing in this project consumes it, and under FR-004 a capability with no consumer does not justify a permission
+- [~] T029 [US3] **SUPERSEDED by R10** (not needed — nothing the workspace relies on was lost; the environment stayed healthy throughout). Original: If any verification shows the workspace lost something it actually needs, apply FR-016: restore the permission immediately from the T008 reversal, record which operation failed and which grant covered it, and **stop for the author to decide**. Do not re-grant and then write the justification to match
+- [x] T030 [US3] Confirm SC-011 **and re-confirm SC-008 on the final state**: as the last action, re-run both the dry run and the verification. T017 established idempotence *before* the three removals and *before* the negative control deleted and recreated a grant, so it says nothing about the state this feature actually leaves behind — in particular, a grant recreated by T026 must carry the same deterministic name as the one it replaced, or the dry run will want to create it again. The dry run must report no change of any kind, the two grants must still be exactly two, and no permission gap may be left open
 
 **Checkpoint**: the reduction is verified, or its verification is honestly
 reported as inconclusive. Either way the environment works.

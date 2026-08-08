@@ -1,5 +1,11 @@
 # Contract — declared role assignments
 
+> **The blob assignment in this contract cannot be deployed, 2026-08-08.** The
+> platform recreates its own grant of the same role at the same scope, so the
+> declaration is rejected as a duplicate. Only the key vault assignment is in
+> `main.bicep`. See [research.md](../research.md) R10.
+
+
 The interface this feature exposes is the template's declaration of what the
 workspace identity may do. This document fixes that contract so the
 implementation has nothing left to invent and the review has something exact to

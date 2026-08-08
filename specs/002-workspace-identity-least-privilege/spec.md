@@ -4,7 +4,11 @@
 
 **Created**: 2026-08-07
 
-**Status**: Draft
+**Status**: Attempted 2026-08-08 — **objective not achieved**. The reduction is
+not possible as specified: the platform maintains this identity's permissions
+and restores what is removed. See [research.md](research.md) R10 for what was
+observed, and the Outcome section at the foot of this document. The environment
+is healthy and nothing was left broken.
 
 **Input**: User description: "Constrain the machine learning workspace's managed
 identity to the least privilege it actually needs on the resources already
@@ -461,3 +465,59 @@ reading the change and forming a judgement.
 - Network-level restrictions, private endpoints, and customer-managed keys.
   These also narrow access, but by a different mechanism and at a different
   cost.
+
+---
+
+## Outcome — 2026-08-08
+
+The feature was attempted against the live environment and **did not achieve its
+objective**. This section records what happened, because a specification that
+quietly stays "Draft" after a failed attempt teaches nothing.
+
+### What was achieved
+
+- The workspace's system data stores now authenticate with the workspace's own
+  identity instead of account keys.
+- One permission — secret read on the vault — is declared in the template and
+  deploys idempotently.
+- No grant is scoped above an individual resource.
+- The environment is healthy and unchanged in shape: same resources, all data
+  store connections intact, no dependency reporting a problem.
+
+### What was not
+
+The identity holds **seven** permissions, up from four. Six of them belong to
+the platform and cannot be removed: deleting one causes it to be recreated,
+under a new name, within seconds.
+
+### Which criteria passed, and why that is not reassuring
+
+| Criterion | Result | Comment |
+| --- | --- | --- |
+| SC-001 build clean | pass | one warning suppressed deliberately, not absent |
+| SC-002 dry run | pass | only against a control run; "nothing to modify" was unsatisfiable |
+| SC-003 nothing above one resource | **pass — and misleading** | satisfied by the platform relocating the same authority onto three resources |
+| SC-004 held set equals declared set | **fail** | seven held, one declared |
+| SC-005 no wildcard or governance authority | **fail** | the platform's grants confer both |
+| SC-006 service-side proof | not reached | the reduction it was to verify did not happen |
+| SC-007 resources unchanged | pass | six, as captured in the baseline |
+| SC-008 redeploy changes nothing | partial | the declared grant keeps its name; the dry run still renders an unresolved reference as a difference |
+| SC-009 cost $0 | pass | nothing billable was created |
+| SC-010 reversal recorded | pass | never needed — nothing stayed removed |
+| SC-011 environment left working | pass | verified as the last action |
+
+**SC-003 is the one to remember.** It passes by command, and the thing it exists
+to guarantee did not happen. It was written to mean "the identity's reach is
+narrow" and it turned out to measure "the word *resourceGroups* does not appear
+in a scope string". The lesson generalises well beyond this feature.
+
+### What this changes for the specification's own premise
+
+FR-001 through FR-005 assume the identity's permissions are the author's to set.
+For a system-assigned workspace identity, they are not. Any future attempt has
+to start from that.
+
+**The untested direction** is a user-assigned managed identity, which the
+platform does not create and may therefore not grant to on its own. This is a
+hypothesis, not a finding — it was not tested here and must not be repeated as
+though it had been.

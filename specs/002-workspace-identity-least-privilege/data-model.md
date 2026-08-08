@@ -1,5 +1,11 @@
 # Phase 1 — Data model
 
+> **Describes an intended state that was not reached, 2026-08-08.** The target
+> below is two grants; the identity holds seven, six of them maintained by the
+> platform. The transition and ordering were executed as written and are
+> accurate as a record of what was done. See [research.md](research.md) R10.
+
+
 The only entity this feature creates or destroys is a **role assignment**: the
 association of one principal, one role definition, and one scope. It is
 control-plane metadata and carries no cost.

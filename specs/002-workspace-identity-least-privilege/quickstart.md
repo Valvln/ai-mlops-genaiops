@@ -1,5 +1,11 @@
 # Quickstart — validating the reduction
 
+> **Steps 1-4 were executed; step 5 was never reached, 2026-08-08.** The
+> reduction it verifies did not happen. The validation sequence is kept because
+> it is sound, and because the negative-control discipline in step 5b is the part
+> worth reusing. See the Outcome section of [spec.md](spec.md).
+
+
 How to prove this feature did what it claims. Read
 [contracts/role-assignments.md](contracts/role-assignments.md) for the exact
 commands; this document is the sequence and what each step has to show.

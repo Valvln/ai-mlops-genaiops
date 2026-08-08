@@ -1,5 +1,11 @@
 # Implementation Plan: Least-privilege permissions for the workspace identity
 
+> **Superseded in part, 2026-08-08.** The approach below was attempted and
+> failed: the platform maintains this identity's permissions and recreates what
+> is deleted. The design is kept as the record of what was tried and why. See
+> [research.md](research.md) R10 and the Outcome section of [spec.md](spec.md).
+
+
 **Branch**: `002-workspace-identity-least-privilege` | **Date**: 2026-08-07 | **Spec**: [spec.md](spec.md)
 
 **Input**: Feature specification from `/specs/002-workspace-identity-least-privilege/spec.md`

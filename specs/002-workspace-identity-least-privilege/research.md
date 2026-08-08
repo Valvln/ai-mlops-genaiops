@@ -288,6 +288,64 @@ identity is minutes old.
 
 ---
 
+## R10 — The platform maintains its own grants (the finding that ended the feature)
+
+Established by running the change on 2026-08-08, not by reasoning. It is the
+answer to the question the specification listed under Edge Cases as something to
+be observed rather than assumed.
+
+### The platform recreates a deleted grant, within seconds
+
+The blob grant was deleted. The platform recreated it — same identity, same
+role, same scope, **new random name** — inside the same deployment. Timestamps:
+
+| Time | Grant | Created by |
+| --- | --- | --- |
+| 06:25:18 | Storage Blob Data Contributor on the storage account | platform (replacing the one just deleted) |
+| 06:25:18 | Azure AI Administrator on the storage account | platform |
+| 06:25:18 | Azure AI Administrator on the key vault | platform |
+| 06:25:18 | Azure AI Administrator on Application Insights | platform |
+| 06:25:30 | Key Vault Secrets User on the key vault | the template |
+
+The template's own blob assignment was then rejected with
+`RoleAssignmentExists`, failing the deployment. **The conflict predicted in R8
+is real, but not for the reason given there**: it was not that the original
+grant could not be re-declared, it was that the platform put it back before the
+template got there.
+
+### `allowRoleAssignmentOnRG: false` relocates, it does not reduce
+
+The single resource-group-scoped `Azure AI Administrator` disappeared, and three
+resource-scoped `Azure AI Administrator` grants appeared in its place — on the
+storage account, the vault, and Application Insights. The authority is
+equivalent. Only its scope wording changed.
+
+**The uncomfortable consequence**: SC-003 — "zero grants scoped to the resource
+group or above" — now **passes**, verified by command, while the reduction it
+was written to guarantee did not happen. The criterion was satisfied by a change
+that defeated its purpose. That is a more valuable thing to have learned than
+the feature would have been.
+
+### What it means
+
+While the workspace carries a **system-assigned** identity, the platform owns
+that identity's permissions. Least privilege cannot be reached by removing
+grants, because removal is not durable.
+
+**Untested direction for separate work**: a **user-assigned** managed identity,
+which the platform does not create and may therefore not auto-grant to. This is
+a hypothesis. It was not tested and must not be recorded as though it were.
+
+### Final state
+
+Seven grants where there were four. None above single-resource scope. One
+declared in the template, six maintained by the platform. The environment is
+healthy: `provisioningState: Succeeded`, six resources unchanged, all four
+datastores present after the switch to identity mode, and `diagnose` reporting
+nothing on any dependency.
+
+---
+
 ## Summary of decisions
 
 | # | Decision | Basis |
