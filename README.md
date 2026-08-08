@@ -140,7 +140,13 @@ Two assumptions fell apart along the way. Empty credentials, I learned, mean the
 
 Then the real lesson. I removed the platform's grant; it quietly recreated it under a new name. I told it to stop assigning permission at the resource-group level; it obeyed the letter and split one broad grant into three narrow ones — same authority, better disguised. One of my checks turned green on exactly that outcome, because it was only ever reading a word in a scope string, not the reach it claimed to measure. A test can pass while the thing it exists to guarantee never happens.
 
-The honest conclusion is negative: these permissions are the platform's to manage, not mine to trim. What's worth trying next is a user-assigned identity — written down as a question, not an answer. What the attempt did leave behind is real: the workspace now authenticates through its own identity instead of account keys, the reasoning is on record for whoever reads this next, and it cost nothing to learn.
+The honest conclusion is negative: these permissions are the platform's to manage, not mine to trim. A user-assigned identity might escape that — but it stays written down as a question, not an answer, and I am not spending a session to settle it. I have to rebuild this workspace anyway when the vault's 90-day trap forces a new resource group; changing one line of Bicep then costs nothing. Deferring a cheap experiment until it becomes free is itself a decision worth making on purpose.
+
+What the attempt did leave behind is real: the workspace now authenticates through its own identity instead of account keys, the reasoning is on record for whoever reads this next, and it cost nothing to learn.
+
+The template still declares exactly one role assignment, on the Key Vault, and it does nothing — the platform's own grant already covers it. I kept it anyway, with a comment that says so in the first line. It is where the working mechanics live: a deterministic name so redeployment is idempotent, an explicit principal type, no subscription id written down. Deleting it would have been tidier and would have taught the next reader less.
+
+So the next thing I build is not another attempt at this. It is the opposite case: a deployment identity for CI, through OIDC and federated credentials — a service principal I create, with a role I assign, at a scope I choose. Same exam objective, and this time least privilege is actually reachable. Holding those two side by side is what I expect to make the difference when a question asks which identity belongs where.
 
 ### `.github/workflows/` — continuous validation
 
