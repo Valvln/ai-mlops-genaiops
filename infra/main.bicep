@@ -128,46 +128,39 @@ resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2026-05-01' =
 }
 
 // --- Workspace identity permissions -----------------------------------------
-// The platform grants this identity permissions of its own accord when the
-// workspace is created, none of which appear in a template. Those grants were
-// removed and replaced by the two below: the least this environment can name a
-// present need for, each scoped to the single resource it concerns rather than
-// to the resource group. See infra/DEPLOY.md for what was removed and how to
-// put it back.
+// This template declares ONE permission. The identity holds several more, all
+// maintained by the platform, none of them declarable here — see the note below
+// and infra/DEPLOY.md for why the attempt to declare them failed and what was
+// learned from it.
 //
-// Built-in role definition identifiers, verified against the live tenant.
+// Built-in role definition identifier, verified against the live tenant.
 // subscriptionResourceId() derives the subscription from the deployment
 // context, so no subscription id is written down here.
-var storageBlobDataContributorRoleId = subscriptionResourceId(
-  'Microsoft.Authorization/roleDefinitions',
-  'ba92f5b4-2d11-453d-a403-e96b0029c9fe'
-)
 var keyVaultSecretsUserRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
   '4633458b-17de-408a-b874-0445c86b69e6'
 )
 
-// Load-bearing because of systemDatastoresAuthMode above, not independently of
-// it: with account keys the service reached this storage without needing any
-// data-plane role at all. In identity mode there is no key, so this grant is
-// the only path to the workspace's own artifacts.
-resource storageBlobRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
-  scope: storageAccount
-  // Derived from the three things that define the assignment, so redeploying
-  // resolves to the same name and changes nothing.
-  name: guid(storageAccount.id, mlWorkspace.id, storageBlobDataContributorRoleId)
-  properties: {
-    roleDefinitionId: storageBlobDataContributorRoleId
-    principalId: mlWorkspace.identity.principalId
-    // Declared so the platform skips a directory lookup that can fail on a
-    // clean rebuild, when the identity is younger than its directory replica.
-    principalType: 'ServicePrincipal'
-  }
-}
+// Blob data access is NOT declared here, and that is a finding rather than an
+// omission. It was declared, and the deployment failed with
+// RoleAssignmentExists.
+//
+// What happened, from the assignment timestamps: deleting the grant the
+// platform had made caused the platform to recreate it, under a new random
+// name, within the same deployment. The template's own assignment - same
+// identity, same role, same scope, different name - was then rejected as a
+// duplicate. It can never succeed while the workspace keeps a system-assigned
+// identity, because the platform actively maintains that grant.
+//
+// Declaring it would therefore guarantee that every future deployment of this
+// template fails. The identity does hold blob data access; it is simply the
+// platform's grant, not one this repository controls. See infra/DEPLOY.md.
 
-// Read only: the workspace reads secrets it keeps here. It has no
-// credential-carrying datastore or connection to write, and governing who else
-// may read the vault is not its business.
+// Read only, and currently redundant: the platform separately grants this
+// identity broader authority over the vault, so nothing depends on this
+// assignment today. It is kept because it is the one permission this template
+// does own and does successfully declare, and because it is what the workspace
+// would fall back on if the platform's grants were ever narrowed.
 resource keyVaultSecretsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: kv
   name: guid(kv.id, mlWorkspace.id, keyVaultSecretsUserRoleId)
