@@ -161,11 +161,11 @@ reported as inconclusive. Either way the environment works.
 
 ## Phase 7: Polish & Cross-Cutting Concerns
 
-- [ ] T031 [P] Update the "Verify" and "Summary checklist" sections of `infra/DEPLOY.md` so the permission checks sit alongside the existing resource checks, and correct the runbook's expected state to reflect the two declared grants
-- [ ] T032 [P] Draft candidate `README.md` text in the author's first person covering what was reduced and why, for the author to rewrite and commit (constitution principle IV — Claude drafts, the author owns)
-- [ ] T033 [P] Update `tracker_ai300.local.md`: the Week 1 row "Gestione identità e accesso (RBAC, managed identity)" moves from 🔄 to ✅, since role assignments have now been exercised for real. Written in Italian, and kept free of anything derivable from the repo
-- [ ] T034 Add the flashcards this feature produced to `FLASHCARDS.local.md` — at minimum: Owner grants no Key Vault data-plane access under RBAC; a duplicate role assignment under a different name is rejected; `2022-04-01` is the latest GA role assignment API version
-- [ ] T035 Decide whether to keep the `az ml` extension installed; if not, `az extension remove -n ml`. Note the decision in `infra/DEPLOY.md` prerequisites
+- [x] T031 [P] Update the "Verify" and "Summary checklist" sections of `infra/DEPLOY.md` so the permission checks sit alongside the existing resource checks, and correct the runbook's expected state to reflect the two declared grants
+- [x] T032 [P] Draft candidate `README.md` text in the author's first person covering what was reduced and why, for the author to rewrite and commit (constitution principle IV — Claude drafts, the author owns)
+- [x] T033 [P] Update `tracker_ai300.local.md`: the Week 1 row "Gestione identità e accesso (RBAC, managed identity)" moves from 🔄 to ✅, since role assignments have now been exercised for real. Written in Italian, and kept free of anything derivable from the repo
+- [x] T034 Add the flashcards this feature produced to `FLASHCARDS.local.md` — at minimum: Owner grants no Key Vault data-plane access under RBAC; a duplicate role assignment under a different name is rejected; `2022-04-01` is the latest GA role assignment API version
+- [x] T035 Decide whether to keep the `az ml` extension installed; if not, `az extension remove -n ml`. Note the decision in `infra/DEPLOY.md` prerequisites
 
 ---
 

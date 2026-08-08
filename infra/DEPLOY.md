@@ -32,6 +32,16 @@ for ns in Microsoft.Storage Microsoft.KeyVault Microsoft.OperationalInsights \
 done
 ```
 
+### 0.1a The `ml` CLI extension
+
+Needed for anything that asks the workspace about itself — `az ml workspace
+diagnose`, `az ml datastore list`. Free, local, and kept installed: the exercises
+from here on use it constantly.
+
+```bash
+az extension add --name ml --yes    # remove with: az extension remove -n ml
+```
+
 Registration is free and asynchronous. Wait until all five report `Registered`:
 
 ```bash
