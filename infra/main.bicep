@@ -156,11 +156,22 @@ var keyVaultSecretsUserRoleId = subscriptionResourceId(
 // template fails. The identity does hold blob data access; it is simply the
 // platform's grant, not one this repository controls. See infra/DEPLOY.md.
 
-// Read only, and currently redundant: the platform separately grants this
-// identity broader authority over the vault, so nothing depends on this
-// assignment today. It is kept because it is the one permission this template
-// does own and does successfully declare, and because it is what the workspace
-// would fall back on if the platform's grants were ever narrowed.
+// INERT TODAY, AND DELIBERATELY SO. Read this before assuming it does anything.
+//
+// The platform separately grants this same identity **Key Vault Administrator**
+// on this same vault, which subsumes secret read entirely. Nothing depends on
+// the assignment below: remove it and the workspace loses no access whatsoever.
+//
+// It is kept for two reasons. It is the only role assignment this repository
+// actually owns and can deploy - the storage equivalent cannot be declared at
+// all, see the note above - so it is where the working mechanics live: a name
+// derived with guid() so redeployment is idempotent, principalType declared to
+// avoid a directory lookup, and the role id reached through
+// subscriptionResourceId() so no subscription id is written down. And it is the
+// fallback if the platform's grants are ever narrowed.
+//
+// If that ever stops being true - if the platform's vault grant disappears -
+// this becomes load-bearing. Until then it documents an intent, not a control.
 resource keyVaultSecretsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
   scope: kv
   name: guid(kv.id, mlWorkspace.id, keyVaultSecretsUserRoleId)
