@@ -332,9 +332,24 @@ While the workspace carries a **system-assigned** identity, the platform owns
 that identity's permissions. Least privilege cannot be reached by removing
 grants, because removal is not durable.
 
-**Untested direction for separate work**: a **user-assigned** managed identity,
-which the platform does not create and may therefore not auto-grant to. This is
-a hypothesis. It was not tested and must not be recorded as though it were.
+**Untested direction**: a **user-assigned** managed identity, which the platform
+does not create and may therefore not auto-grant to. This is a hypothesis. It was
+not tested and must not be recorded as though it were.
+
+**Deliberately not made into a feature.** It answers a question about the
+product's internal behaviour rather than an exam objective — what a managed
+identity is, system-assigned against user-assigned, how roles are assigned and
+why no secret is involved, are all already covered, and this attempt taught them
+better by failing than it would have by succeeding. The question is deferred to
+the teardown, when the workspace must be recreated on a fresh resource group
+because of the vault's 90-day name hold: changing the identity type there costs
+one line of Bicep instead of a session.
+
+**What follows this feature instead** is the opposite case: a deployment identity
+for continuous integration, through OIDC and federated credentials. Same exam
+objective, but a principal created by the author, granted a role by the author,
+at a scope the author chooses — where least privilege is genuinely reachable.
+The contrast between the two is the point.
 
 ### Final state
 
