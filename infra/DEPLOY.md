@@ -32,6 +32,16 @@ for ns in Microsoft.Storage Microsoft.KeyVault Microsoft.OperationalInsights \
 done
 ```
 
+### 0.1a The `ml` CLI extension
+
+Needed for anything that asks the workspace about itself — `az ml workspace
+diagnose`, `az ml datastore list`. Free, local, and kept installed: the exercises
+from here on use it constantly.
+
+```bash
+az extension add --name ml --yes    # remove with: az extension remove -n ml
+```
+
 Registration is free and asynchronous. Wait until all five report `Registered`:
 
 ```bash
@@ -262,9 +272,21 @@ az resource show \
             containerRegistry:properties.containerRegistry}"
 ```
 
-**The check that matters most**: `az resource list` must return **5** rows. If a
-container registry appears, the workspace provisioned one despite the template —
-investigate before doing anything else, because that is a recurring charge.
+**The check that matters most**: no container registry appears. If one does, the
+workspace provisioned it despite the template — investigate before doing
+anything else, because that is a recurring charge.
+
+**On the row count**: this runbook originally said the list must return exactly
+**5**. It returns **6**. The sixth is `Application Insights Smart Detection`, a
+`microsoft.insights/actiongroups` resource the platform created by itself at
+17:06 on 2026-08-07 — ten minutes after the workspace, and declared by no
+template. It notifies through ARM roles with no SMS or voice receivers, so it
+carries no charge.
+
+Two things worth taking from it. First, the count was never the real check;
+*which* resources appear is. Second, the platform adding resources behind the
+template is not a one-off — it did the same thing with role assignments, which
+is what feature 002 exists to deal with.
 
 ### Observed on the first deployment
 
@@ -331,6 +353,145 @@ Covered in section 1. Now declared explicitly.
 
 ---
 
+## Workspace identity permissions
+
+Added by feature 002. The workspace has a system-assigned managed identity
+(`principalId` recorded in section 3). What that identity is allowed to do is
+**not** something the workspace deployment alone decides — the platform grants
+it permissions of its own accord, and none of them appears in the template.
+
+### What the platform granted by itself
+
+Observed on 2026-08-07, all four created by a platform service principal at
+workspace creation, with random assignment names:
+
+| What it allowed | Scope | Kept? |
+| --- | --- | --- |
+| Wildcard control over the vault and the storage account, management of container registries, and writing resource groups | **whole resource group** | removed |
+| Read and write of blob data | storage account | kept, now declared in the template |
+| Privileged read and write of file shares | storage account | removed |
+| Full management of the vault, including who else may access it | key vault | replaced by secret **read** only |
+
+### What it holds now — and why the reduction did not work
+
+**Seven grants, not two.** The attempt to reduce them failed, and how it failed
+is the most useful thing in this section.
+
+| Role | Scope | Owner |
+| --- | --- | --- |
+| Azure AI Administrator | storage account | platform |
+| Azure AI Administrator | key vault | platform |
+| Azure AI Administrator | Application Insights | platform |
+| Storage Blob Data Contributor | storage account | platform |
+| Storage File Data Privileged Contributor | storage account | platform |
+| Key Vault Administrator | key vault | platform |
+| Key Vault Secrets User | key vault | **`main.bicep`** |
+
+Only the last one is declared in the template. The other six are the platform's,
+and they cannot be taken away.
+
+#### The platform recreates what you delete
+
+Deleting the blob grant caused the platform to recreate it, under a new random
+name, **within the same deployment** — seconds later, by the assignment
+timestamps. The template's own declaration of the same permission was then
+rejected as a duplicate (`RoleAssignmentExists`), which is why blob access is
+not declared in `main.bicep`: declaring it guarantees that every future
+deployment fails.
+
+#### `allowRoleAssignmentOnRG: false` relocates authority, it does not reduce it
+
+Setting it removed the single `Azure AI Administrator` grant at resource-group
+scope — and the platform immediately created **three** `Azure AI Administrator`
+grants, one on each dependent resource. The authority is the same. Only its
+shape on paper changed.
+
+This is worth dwelling on: the success criterion "no grant above a single
+resource" now **passes**, while the thing it was written to guarantee is no
+closer than before. A criterion can be satisfied by a change that defeats its
+purpose.
+
+#### What this means for least privilege
+
+While the workspace uses a **system-assigned** identity, the platform maintains
+that identity's permissions and will restore what it needs. Least privilege is
+not reachable by deleting grants.
+
+The direction worth investigating — **not yet tested, do not assume it works** —
+is a **user-assigned** managed identity, which the platform does not create and
+may therefore not auto-grant to. That is a separate piece of work.
+
+### Putting a permission back
+
+**In the event, nothing stayed removed** — the platform restored what it wanted
+and no grant needed manual restoring. The commands below were written before the
+attempt and are kept because they are still the way back if a grant is ever
+removed and *not* recreated, and because the two properties this feature did
+change are reverted the same way.
+
+Nothing below depends on a value that is not written here.
+
+```bash
+export PATH="/usr/local/bin:$PATH"
+RG=rg-ai300-test01
+MI=85e8321f-1e51-42cb-8ced-7fca9b51498b
+
+SA=$(az storage account show -n ai300st2mgou37pfmjou -g $RG --query id -o tsv)
+KV=$(az keyvault show -n ai300kv2mgou37pfmjou -g $RG --query id -o tsv)
+RGID=$(az group show -n $RG --query id -o tsv)
+
+# 1. Resource-group-wide authority — needed if the workspace must provision
+#    compute, a container registry, or an endpoint on demand
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Azure AI Administrator" --scope "$RGID"
+
+# 2. File share access — needed as soon as a compute target mounts
+#    workspacefilestore or workspaceworkingdirectory
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage File Data Privileged Contributor" --scope "$SA"
+
+# 3. Vault administration — needed only to manage vault access itself. If the
+#    need is merely to WRITE secrets, widen the declared grant to
+#    "Key Vault Secrets Officer" in main.bicep instead of running this.
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Key Vault Administrator" --scope "$KV"
+```
+
+`--assignee-object-id` with an explicit principal type is used rather than
+`--assignee`, which resolves the principal through a directory lookup a
+non-administrator may not be allowed to perform.
+
+**If a deployment fails after the blob grant was removed**, the template would
+normally recreate it. Re-running the deployment is the first thing to try. If
+the template itself is the problem, put the grant back by hand and sort the
+template out afterwards — do not leave the workspace without it:
+
+```bash
+az role assignment create --assignee-object-id "$MI" \
+  --assignee-principal-type ServicePrincipal \
+  --role "Storage Blob Data Contributor" --scope "$SA"
+```
+
+### Where a failure is expected later
+
+These are not defects. They are written down so a future failure is recognised
+in seconds rather than diagnosed from scratch.
+
+| When | What fails | What to do |
+| --- | --- | --- |
+| The workspace needs authority over the resource group as a whole | `allowRoleAssignmentOnRG: false` blocks it | set the property back to `true` in `main.bicep` and redeploy |
+| A job or datastore operation is refused on the storage account | the switch from account keys to identity | check the identity's blob access first; the fallback is `systemDatastoresAuthMode: 'accesskey'` |
+| A credential-carrying datastore or connection is created | writing a secret to the vault | the platform's vault administration grant already covers it; only relevant if that grant is ever narrowed |
+
+The three permission-restore commands above are no longer expected to be needed:
+the platform maintains those grants itself. They are kept for the case where it
+stops doing so.
+
+---
+
 ## 4. Cost
 
 **At rest, this deployment should cost approximately nothing.** None of the five
@@ -393,6 +554,13 @@ vaults.
 - [x] `what-if` shows 5 creates, no container registry, no compute
 - [x] `managedNetwork` declared explicitly rather than inherited
 - [x] Deployment succeeded
-- [x] `az resource list` returns exactly 5 resources
+- [x] `az resource list` returns the resources the baseline recorded — **6**, not
+      the 5 originally written here; see section 3
 - [ ] Cost analysis checked after 24–48 hours
 - [x] Teardown plan decided before walking away
+- [x] Workspace identity permissions understood — and found **not** to be the
+      author's to reduce while the identity is system-assigned; see "Workspace
+      identity permissions" above
+- [x] System data stores switched from account keys to the workspace identity
+- [ ] Whether a user-assigned identity escapes the platform's automatic grants —
+      **untested hypothesis**, not a finding

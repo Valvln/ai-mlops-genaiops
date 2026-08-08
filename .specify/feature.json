@@ -1,3 +1,3 @@
 {
-  "feature_directory": "specs/001-azure-ml-workspace"
+  "feature_directory": "specs/002-workspace-identity-least-privilege"
 }

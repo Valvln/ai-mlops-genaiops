@@ -99,10 +99,86 @@ resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2026-05-01' =
     managedNetwork: {
       isolationMode: 'Disabled'
     }
+    // The system datastores authenticated with account keys, which meant the
+    // identity needed listKeys on the storage account — a control-plane
+    // permission much broader than reading and writing the data itself.
+    // Identity mode removes the need for keys altogether, so the two role
+    // assignments below become the whole of what the workspace uses.
+    systemDatastoresAuthMode: 'identity'
+    // The platform grants this identity a role over the entire resource group
+    // unless told not to. Declaring false is the supported way to stop it, and
+    // is what keeps the reduction from being quietly undone by a future
+    // deployment. Discovered only because what-if showed the property; it is
+    // invisible from the template alone.
+    //
+    // The warning below is suppressed, not absent. The property is real - it
+    // was read back from the deployed workspace - but no generally available
+    // API version publishes it in its Bicep type definitions, checked against
+    // 2024-10-01 through 2026-05-01. Bicep sends unrecognised properties
+    // through to the provider unchanged, so the declaration takes effect; what
+    // it loses is compile-time checking of this one line. Re-test on a later
+    // API version and remove the suppression once the type catches up.
+    #disable-next-line BCP037
+    allowRoleAssignmentOnRG: false
   }
   tags: {
     project: 'ai300-prep'
     environment: 'learning'
+  }
+}
+
+// --- Workspace identity permissions -----------------------------------------
+// This template declares ONE permission. The identity holds several more, all
+// maintained by the platform, none of them declarable here — see the note below
+// and infra/DEPLOY.md for why the attempt to declare them failed and what was
+// learned from it.
+//
+// Built-in role definition identifier, verified against the live tenant.
+// subscriptionResourceId() derives the subscription from the deployment
+// context, so no subscription id is written down here.
+var keyVaultSecretsUserRoleId = subscriptionResourceId(
+  'Microsoft.Authorization/roleDefinitions',
+  '4633458b-17de-408a-b874-0445c86b69e6'
+)
+
+// Blob data access is NOT declared here, and that is a finding rather than an
+// omission. It was declared, and the deployment failed with
+// RoleAssignmentExists.
+//
+// What happened, from the assignment timestamps: deleting the grant the
+// platform had made caused the platform to recreate it, under a new random
+// name, within the same deployment. The template's own assignment - same
+// identity, same role, same scope, different name - was then rejected as a
+// duplicate. It can never succeed while the workspace keeps a system-assigned
+// identity, because the platform actively maintains that grant.
+//
+// Declaring it would therefore guarantee that every future deployment of this
+// template fails. The identity does hold blob data access; it is simply the
+// platform's grant, not one this repository controls. See infra/DEPLOY.md.
+
+// INERT TODAY, AND DELIBERATELY SO. Read this before assuming it does anything.
+//
+// The platform separately grants this same identity **Key Vault Administrator**
+// on this same vault, which subsumes secret read entirely. Nothing depends on
+// the assignment below: remove it and the workspace loses no access whatsoever.
+//
+// It is kept for two reasons. It is the only role assignment this repository
+// actually owns and can deploy - the storage equivalent cannot be declared at
+// all, see the note above - so it is where the working mechanics live: a name
+// derived with guid() so redeployment is idempotent, principalType declared to
+// avoid a directory lookup, and the role id reached through
+// subscriptionResourceId() so no subscription id is written down. And it is the
+// fallback if the platform's grants are ever narrowed.
+//
+// If that ever stops being true - if the platform's vault grant disappears -
+// this becomes load-bearing. Until then it documents an intent, not a control.
+resource keyVaultSecretsRoleAssignment 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: kv
+  name: guid(kv.id, mlWorkspace.id, keyVaultSecretsUserRoleId)
+  properties: {
+    roleDefinitionId: keyVaultSecretsUserRoleId
+    principalId: mlWorkspace.identity.principalId
+    principalType: 'ServicePrincipal'
   }
 }
 

@@ -114,12 +114,39 @@ region is now `northeurope`; and all five resource providers started out
 unregistered, which fails a deployment immediately.
 
 At rest this deployment should cost approximately nothing — none of the five
-resources carries a fixed monthly fee. I am checking that in Cost Management
-rather than trusting the table, because a figure that is not near zero would
-mean something was provisioned that the template never declared.
+resources carries a fixed monthly fee. I checked that in Cost Management rather
+than trusting the table, because a figure that is not near zero would mean
+something was provisioned that the template never declared. It is zero: only the
+storage account and the vault have usage records at all, both at no charge.
+
+The resource count, on the other hand, was wrong. My runbook said the group
+should contain five resources; it contains six. Application Insights deployed a
+notification group for itself ten minutes after the workspace — its own
+deployment, which I did not ask for and which is recorded in the deployment
+history as having failed. It costs nothing, but it is the same habit that later
+defeated the identity work below: this platform provisions things the template
+never mentions.
 
 So the template compiles, and it also deploys. Those turned out to be genuinely
 different claims.
+
+### What the workspace identity taught me — a feature that failed
+
+Let's name the failure upfront: I tried to shrink a managed identity down to only what it needed. I did not succeed — and I am keeping the attempt in the repository, because the reason it failed is worth more than the feature would have been.
+
+The identity already held four role assignments no template had ever declared, one of them a wildcard grant over the whole resource group. So the task was never "grant the minimum"; it was "take back what had been granted without asking."
+
+Two assumptions fell apart along the way. Empty credentials, I learned, mean the tool hides them — not that the data stores don't use them. And one of my success criteria could never have passed: even the old, already-deployed template showed changes on a clean run. Comparing against that baseline before trusting any result is the one habit worth keeping.
+
+Then the real lesson. I removed the platform's grant; it quietly recreated it under a new name. I told it to stop assigning permission at the resource-group level; it obeyed the letter and split one broad grant into three narrow ones — same authority, better disguised. One of my checks turned green on exactly that outcome, because it was only ever reading a word in a scope string, not the reach it claimed to measure. A test can pass while the thing it exists to guarantee never happens.
+
+The honest conclusion is negative: these permissions are the platform's to manage, not mine to trim. A user-assigned identity might escape that — but it stays written down as a question, not an answer, and I am not spending a session to settle it. I have to rebuild this workspace anyway when the vault's 90-day trap forces a new resource group; changing one line of Bicep then costs nothing. Deferring a cheap experiment until it becomes free is itself a decision worth making on purpose.
+
+What the attempt did leave behind is real: the workspace now authenticates through its own identity instead of account keys, the reasoning is on record for whoever reads this next, and it cost nothing to learn.
+
+The template still declares exactly one role assignment, on the Key Vault, and it does nothing — the platform's own grant already covers it. I kept it anyway, with a comment that says so in the first line. It is where the working mechanics live: a deterministic name so redeployment is idempotent, an explicit principal type, no subscription id written down. Deleting it would have been tidier and would have taught the next reader less.
+
+So the next thing I build is not another attempt at this. It is the opposite case: a deployment identity for CI, through OIDC and federated credentials — a service principal I create, with a role I assign, at a scope I choose. Same exam objective, and this time least privilege is actually reachable. Holding those two side by side is what I expect to make the difference when a question asks which identity belongs where.
 
 ### `.github/workflows/` — continuous validation
 
