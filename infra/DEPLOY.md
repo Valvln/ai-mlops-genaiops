@@ -362,22 +362,64 @@ workspace creation, with random assignment names:
 | Privileged read and write of file shares | storage account | removed |
 | Full management of the vault, including who else may access it | key vault | replaced by secret **read** only |
 
-### What it holds now
+### What it holds now — and why the reduction did not work
 
-Two grants, both declared in `main.bicep`, both scoped to a single resource:
+**Seven grants, not two.** The attempt to reduce them failed, and how it failed
+is the most useful thing in this section.
 
-| Role | Scope | Why |
+| Role | Scope | Owner |
 | --- | --- | --- |
-| Storage Blob Data Contributor | storage account | The four default datastores are identity-based and carry no stored credentials, so this is the only way the service reaches its own artifacts. |
-| Key Vault Secrets User | key vault | The workspace reads secrets it keeps in its own vault. It does not need to write any, and does not need to govern who else may read them. |
+| Azure AI Administrator | storage account | platform |
+| Azure AI Administrator | key vault | platform |
+| Azure AI Administrator | Application Insights | platform |
+| Storage Blob Data Contributor | storage account | platform |
+| Storage File Data Privileged Contributor | storage account | platform |
+| Key Vault Administrator | key vault | platform |
+| Key Vault Secrets User | key vault | **`main.bicep`** |
 
-Nothing is granted on Application Insights, on the Log Analytics workspace, or
-at resource-group scope.
+Only the last one is declared in the template. The other six are the platform's,
+and they cannot be taken away.
+
+#### The platform recreates what you delete
+
+Deleting the blob grant caused the platform to recreate it, under a new random
+name, **within the same deployment** — seconds later, by the assignment
+timestamps. The template's own declaration of the same permission was then
+rejected as a duplicate (`RoleAssignmentExists`), which is why blob access is
+not declared in `main.bicep`: declaring it guarantees that every future
+deployment fails.
+
+#### `allowRoleAssignmentOnRG: false` relocates authority, it does not reduce it
+
+Setting it removed the single `Azure AI Administrator` grant at resource-group
+scope — and the platform immediately created **three** `Azure AI Administrator`
+grants, one on each dependent resource. The authority is the same. Only its
+shape on paper changed.
+
+This is worth dwelling on: the success criterion "no grant above a single
+resource" now **passes**, while the thing it was written to guarantee is no
+closer than before. A criterion can be satisfied by a change that defeats its
+purpose.
+
+#### What this means for least privilege
+
+While the workspace uses a **system-assigned** identity, the platform maintains
+that identity's permissions and will restore what it needs. Least privilege is
+not reachable by deleting grants.
+
+The direction worth investigating — **not yet tested, do not assume it works** —
+is a **user-assigned** managed identity, which the platform does not create and
+may therefore not auto-grant to. That is a separate piece of work.
 
 ### Putting a permission back
 
-Three grants were removed. Each has exactly one restore command. Nothing below
-depends on a value that is not written here.
+**In the event, nothing stayed removed** — the platform restored what it wanted
+and no grant needed manual restoring. The commands below were written before the
+attempt and are kept because they are still the way back if a grant is ever
+removed and *not* recreated, and because the two properties this feature did
+change are reverted the same way.
+
+Nothing below depends on a value that is not written here.
 
 ```bash
 export PATH="/usr/local/bin:$PATH"
@@ -430,10 +472,13 @@ in seconds rather than diagnosed from scratch.
 
 | When | What fails | What to do |
 | --- | --- | --- |
-| A compute target mounts `workspacefilestore` or `workspaceworkingdirectory` | file share access | restore command 2 |
-| The workspace provisions compute, a registry, or an endpoint on demand | resource-group authority | restore command 1 |
-| A credential-carrying datastore or connection is created | writing a secret to the vault | widen the declared vault grant to secret write — **not** restore command 3 |
-| The first job emits telemetry | metrics publication on Application Insights | grant it then, with a stated need |
+| The workspace needs authority over the resource group as a whole | `allowRoleAssignmentOnRG: false` blocks it | set the property back to `true` in `main.bicep` and redeploy |
+| A job or datastore operation is refused on the storage account | the switch from account keys to identity | check the identity's blob access first; the fallback is `systemDatastoresAuthMode: 'accesskey'` |
+| A credential-carrying datastore or connection is created | writing a secret to the vault | the platform's vault administration grant already covers it; only relevant if that grant is ever narrowed |
+
+The three permission-restore commands above are no longer expected to be needed:
+the platform maintains those grants itself. They are kept for the case where it
+stops doing so.
 
 ---
 
@@ -499,6 +544,13 @@ vaults.
 - [x] `what-if` shows 5 creates, no container registry, no compute
 - [x] `managedNetwork` declared explicitly rather than inherited
 - [x] Deployment succeeded
-- [x] `az resource list` returns exactly 5 resources
+- [x] `az resource list` returns the resources the baseline recorded — **6**, not
+      the 5 originally written here; see section 3
 - [ ] Cost analysis checked after 24–48 hours
 - [x] Teardown plan decided before walking away
+- [x] Workspace identity permissions understood — and found **not** to be the
+      author's to reduce while the identity is system-assigned; see "Workspace
+      identity permissions" above
+- [x] System data stores switched from account keys to the workspace identity
+- [ ] Whether a user-assigned identity escapes the platform's automatic grants —
+      **untested hypothesis**, not a finding
