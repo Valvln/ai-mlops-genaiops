@@ -30,6 +30,25 @@ jobs:
       - name: Show Bicep version
         run: az bicep version
 
-      # Exits with a non-zero code if the template does not compile.
-      - name: Build template
-        run: az bicep build --file infra/main.bicep
+      # Every template under infra/, not just main.bicep. Globbing the
+      # directory rather than naming files means a template added later is
+      # validated without anybody remembering to add it here.
+      #
+      # The empty-match guard is not defensive padding: a glob that matched
+      # nothing would turn this job into a no-op that reports success, which is
+      # the same vacuity that let feature 002's SC-003 pass.
+      - name: Build every template under infra/
+        run: |
+          set -euo pipefail
+          shopt -s globstar nullglob
+          found=0
+          for template in infra/**/*.bicep; do
+            echo "--- ${template}"
+            az bicep build --file "${template}"
+            found=$((found + 1))
+          done
+          if [ "${found}" -eq 0 ]; then
+            echo "::error::No Bicep template found under infra/ - nothing was validated."
+            exit 1
+          fi
+          echo "${found} template(s) built."

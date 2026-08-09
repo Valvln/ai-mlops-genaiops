@@ -19,8 +19,8 @@ build/
 *.log
 node_modules/
 
-# Build artifact from `az bicep build`: main.bicep is the source of truth
-infra/main.json
+# Build artifacts from `az bicep build`: the .bicep files are the source of truth
+infra/*.json
 
 # Local agent settings (machine-specific, may contain credentials)
 .claude/settings.local.json
