@@ -8,11 +8,25 @@ on every deployment instead of on the day it was built.
 
 ## Assertion rule
 
-A probe passes when **both** hold:
+A probe passes when **all three** hold:
 
-1. the command exits non-zero, and
+1. the command exits non-zero,
 2. its stderr names an authorization refusal — `AuthorizationFailed`,
-   `AuthorizationFailedWithLinkedSubscription`, or an equivalent `403`.
+   `AuthorizationFailedWithLinkedSubscription`, or an equivalent `403`, and
+3. **the refusal names the action the probe claims to test.**
+
+The third condition was added after run `31304052843`, where it would have
+caught a real defect. P4 reported as passing on a refusal of
+`Microsoft.Resources/subscriptions/resourcegroups/read` — a genuine
+authorization error, on the same axis P2 already covers, produced because the
+CLI failed on a preliminary call and never reached the resource type P4 exists
+to be refused. Conditions 1 and 2 both held. The axis SC-003 needed was untested
+and scored as tested.
+
+That is feature 002's SC-003 failure in miniature, reproduced inside this
+feature's own assertion: a check that passes while the thing it exists to prove
+has not happened. Two ways in, one fix each — the probe now issues a single
+request (see P4), and the assertion now checks *which* action was refused.
 
 A probe **fails the workflow run** when the command succeeds. That is the point:
 if the boundary is ever widened, a deployment goes red and names the probe that
@@ -85,16 +99,23 @@ principal that can assign roles at subscription scope can make itself Owner.
 ### P4 — an undeclared resource type, inside the declared scope
 
 ```bash
-az identity create \
-  --name id-ai300-denied-probe \
-  --resource-group rg-ai300-test01
+az rest --method put \
+  --url "https://management.azure.com/subscriptions/$AZURE_SUBSCRIPTION_ID/resourceGroups/rg-ai300-test01/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-ai300-denied-probe?api-version=2024-11-30" \
+  --body '{"location":"northeurope"}'
 ```
 
 | | |
 | --- | --- |
 | Boundary | inside the right resource group, outside the permitted operations |
-| Expected | non-zero, `AuthorizationFailed` |
+| Expected | non-zero, `AuthorizationFailed` naming `Microsoft.ManagedIdentity/userAssignedIdentities/write` |
 | If it succeeded | a user-assigned identity exists; free, delete it, run fails |
+
+**Not `az identity create`.** The convenience command reads the resource group
+before creating anything, and that read is itself refused — so the probe stopped
+one call short of the boundary it exists to test and reported the wrong refusal
+as evidence. `az rest` issues exactly one request, which forces exactly one
+authorization decision, on the axis actually claimed. API version resolved
+against the live provider (`2024-11-30`, latest non-preview), not from memory.
 
 This is the axis a general-management built-in role would have left wide open,
 and it is what the FR-006 clarification bought. `Microsoft.ManagedIdentity` is
