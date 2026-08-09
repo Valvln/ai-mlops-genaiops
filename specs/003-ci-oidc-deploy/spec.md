@@ -82,6 +82,40 @@ feature must not repeat it.
   The narrow option also means the minimum cannot be assumed: it is discovered by
   deploying, failing, and reading which operation was refused. That discovery is
   the substance of the feature.
+- Q: What is the unit of "authority" that FR-008 and SC-007 withdraw and re-test
+  — the whole grant, each resource type's operations, or each single operation?
+  → A: **the discovery record proves the operations; the explicit withdrawal test
+  applies once, to the grant as a whole**. Discovery already produces the
+  necessity evidence for free: an operation is in the role *because* a named
+  deployment failure demanded it, and that failure is the proof. Re-withdrawing
+  it to reproduce the same failure demonstrates nothing new at a cost of one
+  deployment cycle each. The rigour is kept by making the record binding in the
+  destructive direction — an operation with no failure behind it is deleted, not
+  argued for.
+- Q: What starts the deploying workflow? → A: **both an accepted change to the
+  infrastructure on the default branch, and a manual request by the author** —
+  each still subject to the approval gate. The manual path is not a convenience:
+  SC-004 and SC-007 need runs that are not merges, and without it they would be
+  triggered by empty commits, which is noise in the history for nothing. Neither
+  path is reachable without write access to the repository, so FR-014 holds.
+- Q: Does an empty result count as a refusal? → A: **no. Only an explicit
+  authorization denial counts.** The platform filters enumerations by permission,
+  so a listing run without authority returns success with zero items —
+  indistinguishable from "there is nothing there". That is the same vacuity that
+  let 002's SC-003 pass. Probes therefore target **named** resources rather than
+  listings, which also means a second, empty resource container must exist purely
+  as a probe target. It is created by the author, costs nothing, and removes the
+  remaining ambiguity between "you may not" and "it is not there".
+- Q: How is the operation set discovered in practice? → A: **in two observational
+  passes.** First, derive it from the record of what the deployment actually did
+  — the environment keeps an account of every operation it invoked, and reading
+  that is observation, not assumption. Second, verify by deploying as the
+  identity; whatever the first pass missed surfaces as a failure and is added one
+  operation at a time. The second pass is needed because the record does not
+  capture every read the platform performs on the way. Read alone would be
+  incomplete; trial alone would cost twelve to eighteen gated runs before the
+  first success. Neither pass consults documentation for what *ought* to be
+  needed, which is what FR-006a forbids.
 
 ## Cost
 
@@ -145,9 +179,10 @@ out-of-scope actions, capture the errors.
 1. **Given** a token held as the deployment identity, **When** a write is
    attempted at subscription scope, **Then** it is refused with an authorization
    error and nothing is created.
-2. **Given** the same token, **When** a resource outside the declared scope is
-   read, **Then** the read is refused or returns nothing, and the outcome is
-   recorded verbatim.
+2. **Given** the same token, **When** a **named** resource container other than
+   the declared one is read, **Then** the read is refused with an authorization
+   error, recorded verbatim. An enumeration returning zero items does not
+   satisfy this scenario.
 3. **Given** the same token, **When** the identity attempts to grant itself or
    anything else authority outside the declared scope, **Then** the attempt is
    refused.
@@ -216,26 +251,31 @@ observe which workflows run for it.
 
 ### User Story 5 - No granted authority is inert (Priority: P3)
 
-Each authority the identity holds is withdrawn in turn and the deployment is
-re-run. Every withdrawal must break it. Anything whose removal changes nothing
-is removed permanently.
+The grant the identity holds is withdrawn and the deployment is re-run: it must
+break, and restoring the grant must fix it. Inside the role, every permitted
+operation is traced back to the deployment failure that demanded it, and any
+operation that cannot be traced is deleted.
 
 **Why this priority**: It is what separates this feature from 002's outcome,
 where a declared grant turned out to do nothing at all. It is last because it
 can only run once the deployment is known to work.
 
-**Independent Test**: For each grant, remove it, run the deployment, record the
-failure, restore the grant, run the deployment, record the success.
+**Independent Test**: Remove the grant, run the deployment, record the failure,
+restore the grant, run the deployment, record the success. Separately, walk the
+final role against the discovery record and account for every operation from
+either pass.
 
 **Acceptance Scenarios**:
 
-1. **Given** a working deployment, **When** an authority the identity holds is
-   withdrawn, **Then** the next run fails with an authorization error naming the
-   operation it could not perform.
-2. **Given** that failure, **When** the authority is restored, **Then** the next
-   run succeeds again.
-3. **Given** a withdrawal that produced no failure, **When** the feature closes,
-   **Then** that authority is not present in the final state.
+1. **Given** a working deployment, **When** the identity's grant is withdrawn,
+   **Then** the next run fails with an authorization error.
+2. **Given** that failure, **When** the grant is restored, **Then** the next run
+   succeeds again.
+3. **Given** the final role, **When** each permitted operation is looked up in
+   the discovery record, **Then** every one of them is accounted for by a line in
+   the derivation pass or by a verification failure that named it.
+4. **Given** an operation the discovery record does not account for, **When** the
+   feature closes, **Then** that operation is not present in the final role.
 
 ---
 
@@ -257,6 +297,14 @@ failure, restore the grant, run the deployment, record the success.
   but was not intended** — for instance a run triggered by a mechanism nobody
   considered. The trust condition must be narrow enough that this is not
   reachable from a fork.
+- **The deployment history fills with failures.** Discovery works by failing, so
+  the environment's history will hold several failed records before a succeeded
+  one. They are evidence, not mess. SC-001 must be read as requiring *a*
+  succeeded record from the final run, not a clean history.
+- **A failure during discovery is mistaken for a boundary.** Overlapping runs,
+  or a deployment that failed for an unrelated reason, can produce errors that
+  read like authorization refusals. FR-017 applies to discovery too: an operation
+  is added to the role only when the failure actually names it.
 - **The narrow authority goes stale.** When the template gains a resource type,
   the identity will not be permitted to create it and the deployment will fail.
   That is the correct behaviour, not a defect: it is the cost of FR-006 and it
@@ -306,19 +354,41 @@ failure, restore the grant, run the deployment, record the success.
   it actually declares. A predefined role granting general management of the
   container does NOT satisfy this: it would leave the identity able to create
   resource types the template never mentions, including billable ones.
-- **FR-006a**: The set of operations MUST be **discovered**, not assumed. It is
-  established by deploying, reading which operation a failure names, and adding
-  only that one. An operation added because it seemed likely to be needed, and
-  never observed to be needed, violates FR-008.
+- **FR-006a**: The set of operations MUST be **discovered**, not assumed, in two
+  observational passes:
+
+  **Derivation** — from the environment's own record of the operations a
+  deployment invoked. This is reading what happened, not predicting what might be
+  needed.
+
+  **Verification** — by deploying as the identity. Anything the first pass missed
+  surfaces as a failure naming the operation, and only that operation is added.
+
+  Consulting documentation for what a deployment of this kind *ought* to require
+  is not discovery and MUST NOT be the basis for any operation in the role.
+- **FR-006c**: Every operation in the final role MUST trace to one of the two
+  passes — a line in the derivation record, or a recorded verification failure.
+  An operation traceable to neither MUST be removed.
 - **FR-006b**: The identity MUST NOT be able to create a resource type the
   template does not declare. Demonstrated by attempting one and recording the
   refusal, not by reading the list of permitted operations.
 - **FR-007**: The identity MUST hold enough authority to perform every operation
   the template requires, including creating the permission grant the template
   declares, and no authority beyond that set.
-- **FR-008**: Every authority the identity holds MUST be necessary. Withdrawing
-  any one of them MUST cause the deployment to fail. Any authority whose
-  withdrawal produces no observable change MUST be removed from the final state.
+- **FR-008**: Every authority the identity holds MUST be necessary, established
+  at two levels:
+
+  **Each operation** — an operation is permitted only if FR-006a's discovery
+  record accounts for it: a line in the derivation record, or a verification
+  failure that named it. That record is the evidence, and it is binding in the
+  destructive direction — an operation it does not account for MUST be removed
+  from the role, not justified in prose. No separate withdrawal cycle is run per
+  operation, because discovery already demonstrated the necessity of each one.
+
+  **The grant as a whole** — withdrawing the identity's grant MUST cause the
+  deployment to fail, and restoring it MUST make the deployment succeed again.
+  This is run explicitly, and it is the check 002 would have failed: it proves
+  the grant is what authorizes the deployment, and not something else.
 - **FR-009**: The identity MUST NOT be able to create or delete the resource
   container it is scoped to.
 
@@ -340,6 +410,10 @@ failure, restore the grant, run the deployment, record the success.
   credential and requesting no identity token.
 - **FR-014**: The deploying behaviour MUST NOT be reachable by any event that a
   contributor without write access to the repository can cause.
+- **FR-014a**: The deploying behaviour MUST be startable in two ways: by an
+  accepted change to the infrastructure on the default branch, and by an explicit
+  request from someone with write access. Both MUST pass the approval gate; a
+  path that bypasses it would defeat FR-004.
 - **FR-015**: Validation and deployment MUST remain separable, so that a change
   to one cannot silently grant the other access it did not have.
 
@@ -352,6 +426,14 @@ failure, restore the grant, run the deployment, record the success.
 - **FR-017**: Evidence MUST distinguish an authorization refusal from any other
   failure. A failure caused by a bad name, an absent resource, or a malformed
   request is not evidence of a boundary.
+- **FR-017a**: Only an explicit authorization denial counts as a refusal. A
+  successful call returning an empty result MUST NOT be recorded as evidence: the
+  platform filters enumerations by permission, so an empty listing is
+  indistinguishable from an empty scope.
+- **FR-017b**: Probes MUST therefore target **named** resources, not listings.
+  Where the boundary being tested is access to another resource container, a
+  second, empty container MUST exist to be named — so that a refusal cannot be
+  confused with the absence of a target.
 - **FR-018**: A reversal MUST be recorded as runnable commands: how to revoke
   the identity's access, remove the trust, and return the repository to its
   previous state.
@@ -389,7 +471,9 @@ relocates authority rather than reducing it — the failure mode of 002's SC-003
 - **SC-001**: A workflow run triggered from the trusted context completes green,
   **and** the environment's deployment history contains a record created during
   that run whose state is succeeded. Green alone does not satisfy this: a
-  workflow that validated and reported success would pass it.
+  workflow that validated and reported success would pass it. The history will
+  also contain failed records from discovery; they do not count against this
+  criterion, which asks for one succeeded record from the final run.
 - **SC-002**: The environment's resource inventory taken after the run is
   identical to the inventory taken before it — same resources, same names, same
   count, same service tiers.
@@ -406,9 +490,11 @@ relocates authority rather than reducing it — the failure mode of 002's SC-003
   to. This is the axis a predefined general-management role would have left open,
   and it is the one that proves the narrow authority is real.
 
-  A criterion satisfied by enumerating grants and observing their scope wording
-  does **not** satisfy this one — that is precisely the check that passed in 002
-  while the objective was missed.
+  Each of the four MUST be an explicit authorization denial against a **named**
+  target. A call that succeeds and returns nothing is not a refusal and does not
+  count. A criterion satisfied by enumerating grants and observing their scope
+  wording does not satisfy this one either — that is precisely the check that
+  passed in 002 while the objective was missed.
 - **SC-004**: Three authentication refusals are recorded, each with its error:
 
   1. A run of **this repository, on the branch that deploys, that has not passed
@@ -429,11 +515,17 @@ relocates authority rather than reducing it — the failure mode of 002's SC-003
   Verified by enumeration after the fact, and made meaningful by SC-001 having
   already succeeded — the deployment demonstrably happened while no secret
   existed.
-- **SC-007**: For every authority the identity holds, withdrawing it and
-  re-running the deployment produces a failure naming the operation that could
-  not be performed; restoring it produces a success. The count of authorities
-  tested equals the count of authorities held. Zero authorities survive to the
-  final state untested.
+- **SC-007**: Necessity is settled at both levels of FR-008:
+
+  **Operations** — every operation in the final role maps to an entry in the
+  discovery record: either a line in the derivation pass, or a verification
+  failure that named it. The count of operations equals the count of record
+  entries accounting for them. Zero operations survive unaccounted for.
+
+  **The grant** — withdrawing it and re-running the deployment produces a
+  failure; restoring it and re-running produces a success. Both runs are
+  recorded. A withdrawal that leaves the deployment working means something
+  other than this grant is authorizing it, and the feature is not done.
 - **SC-008**: The environment's cost report for the days spanning this feature
   shows no meter that was not already present, and the total attributable to this
   feature is **0.00**.
@@ -455,7 +547,12 @@ relocates authority rather than reducing it — the failure mode of 002's SC-003
 - The out-of-scope actions used as evidence are chosen so that a *successful*
   one would create nothing billable. A resource container costs nothing to
   create and would be removed immediately if the refusal unexpectedly did not
-  occur.
+  occur. The same applies to the probe for FR-006b: the resource type attempted
+  inside the declared scope must be one that carries no charge even if the
+  attempt unexpectedly succeeds.
+- A second, empty resource container exists solely as a probe target for
+  FR-017b. It is created by the author, holds nothing, carries no charge, and is
+  removed by the reversal in FR-018.
 - Fork behaviour is verified through what the repository observably runs for a
   pull request, and through the trust condition refusing an untrusted context
   (SC-004). Standing up a second account to author a genuine fork pull request is

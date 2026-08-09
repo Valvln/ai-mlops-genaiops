@@ -38,15 +38,41 @@
 
 ## Notes
 
-**Clarifications resolved (2026-08-09)** — both were scope-level, both were
-answered toward the narrower option:
+### Clarifications resolved during `/speckit-specify` (2026-08-09)
+
+Both were scope-level, both answered toward the narrower option:
 
 - **FR-004** — trust binds to a named approval gate, not to a branch. Adds
   FR-004a (the gate must require a human decision) and a third refusal to SC-004.
 - **FR-006** — authority restricted to the resource types the template declares,
-  not a predefined general-management role. Adds FR-006a (the operation set is
-  discovered, not assumed) and FR-006b, and a fourth refusal to SC-003 on the
-  second axis of the boundary: inside the scope, outside the authority.
+  not a predefined general-management role. Adds FR-006a and FR-006b, and a
+  fourth refusal to SC-003 on the second axis of the boundary: inside the scope,
+  outside the authority.
+
+### Clarifications resolved during `/speckit-clarify` (2026-08-09)
+
+Four asked, four answered. Two of them changed the shape of the work rather than
+a detail:
+
+- **Unit of authority for FR-008 / SC-007.** Necessity of individual operations
+  is carried by the discovery record; the explicit withdraw-and-rerun test
+  applies once, to the grant as a whole. Rewrote FR-008, SC-007, US5. Turned
+  roughly fifteen deployment cycles into one, without weakening the check — the
+  record is binding destructively (unaccounted operation → deleted).
+- **Trigger for the deploying workflow.** Merge on the default branch *and*
+  manual dispatch, both gated. Added FR-014a. Manual dispatch is what makes
+  SC-004 and SC-007 testable without empty commits.
+- **What counts as a refusal.** Only an explicit authorization denial; an empty
+  result never counts, because the platform filters enumerations by permission.
+  Added FR-017a/FR-017b, rewrote US2 scenario 2 and SC-003. This resolved a real
+  contradiction: US2 previously accepted "returns nothing" while SC-003 demanded
+  an authorization error. **Consequence**: a second empty resource container is
+  needed as a named probe target. Free, and removed by the FR-018 reversal.
+- **How discovery is actually performed.** Two observational passes — derive from
+  the record of operations the deployment invoked, then verify by deploying as
+  the identity. Rewrote FR-006a, added FR-006c. Neither pass consults
+  documentation, so FR-006a holds; the derivation pass is what keeps the gated
+  approval count at two or three instead of fifteen.
 
 ### Two limits recorded rather than hidden
 
@@ -61,9 +87,26 @@ in Assumptions, and claims only the weaker property: a deliberate pause.
 
 ### Watch during planning
 
-FR-006a says the permitted operation set is discovered by deploying and reading
-which operation each failure names. This means the plan must expect a sequence of
-**failing** deployments before a green one, and must not treat the first failure
-as a defect. A plan that pre-computes the operation list from documentation would
-satisfy FR-006 in form while abandoning FR-006a and FR-008 — the same shape of
-mistake as 002's SC-003.
+**Failing deployments are the method, not a defect.** FR-006a establishes the
+operation set by deploying and reading what the failure names. The plan must
+budget for failed runs and failed deployment records, and must not treat the
+first red run as something to debug away.
+
+**The one substitution that would hollow this out**: a plan that pre-computes the
+operation list from role documentation would satisfy FR-006 in form while
+abandoning FR-006a, FR-006c, and FR-008 — the same shape of mistake as 002's
+SC-003. FR-006c is the guard: every operation must trace to a derivation-record
+line or a verification failure.
+
+### Deferred, deliberately
+
+Two lower-impact items were left for the plan rather than spent as clarification
+questions:
+
+- **Overlapping runs.** The edge case is recorded; no requirement constrains it.
+  A serialisation control is a plan-level default, but it interacts with FR-017 —
+  a deployment that failed because another was in flight can read like an
+  authorization refusal and must not be mistaken for one during discovery.
+- **Where evidence is stored.** FR-016 says what must be captured, not where.
+  Feature 002 used an `evidence/` directory in the feature folder; following that
+  is a plan decision.
