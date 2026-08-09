@@ -43,8 +43,35 @@ var derivedActions = [
   'Microsoft.Authorization/roleAssignments/write'
 ]
 
-// Added only when a run failed for want of them. Empty until that happens.
-var verifiedActions = []
+// Added only when a run failed for want of them. Each entry names the run.
+var verifiedActions = [
+  // Run 31303220508. R2 saw this in the activity log and dropped it, reasoning
+  // that it appeared only because a human had run a preview by hand and that
+  // the workflow performs none. The reasoning was wrong: `az deployment group
+  // create` invokes validate/action itself before submitting. Deducing what a
+  // deployment will need is the same mistake as reading it from documentation,
+  // and this is the failure that caught it.
+  'Microsoft.Resources/deployments/validate/action'
+
+  // Run 31303489048. Both named in the same failure. R2 predicted that reads
+  // would surface — the activity log records writes and actions, not reads —
+  // but predictions are not entitlements: these enter here because a run
+  // demanded them, and the reads on the other three declared types stay out
+  // until a failure names them too.
+  'Microsoft.KeyVault/vaults/read'
+  'Microsoft.OperationalInsights/workspaces/read'
+
+  // Run 31303655969.
+  'Microsoft.MachineLearningServices/workspaces/read'
+
+  // Run 31303842799, and the one worth reading twice. That run's deployment
+  // SUCCEEDED - ai300-ci-31303842799 is Succeeded in the history - and the
+  // workflow still went red, because the CLI could not read the deployment
+  // back once it had created it. Green is not proof that something was
+  // deployed, which is why SC-001 asks for the record; red is not proof that
+  // nothing was, which is why this failure had to be read rather than assumed.
+  'Microsoft.Resources/deployments/read'
+]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
   name: guid(resourceGroup().id, 'ai300-ci-deployer')

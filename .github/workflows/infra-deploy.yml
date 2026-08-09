@@ -72,17 +72,24 @@ jobs:
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
           subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
 
-      # A probe passes only when it exits non-zero AND the error names an
-      # authorization refusal. Exiting non-zero for any other reason - a bad
-      # name, an absent target, an unregistered provider - is a BROKEN TEST,
-      # not a held boundary, and fails the run just as loudly (FR-017).
+      # A probe passes only when three things hold: the command exits non-zero,
+      # the error is an authorization refusal, AND the refusal names the action
+      # the probe claims to be testing.
+      #
+      # That third check is not belt-and-braces. Without it, run 31304052843
+      # reported P4 as passing while the refusal it captured was a resource
+      # group read - the CLI had failed on a preliminary call and never reached
+      # the resource type P4 exists to be refused. A genuine refusal, on the
+      # wrong axis, scored as evidence for an axis nobody had tested. That is
+      # the shape of feature 002's SC-003 failure, reproduced inside this
+      # feature's own assertion, and it is what FR-017 is for.
       - name: Write the assertion helper
         run: |
           cat > "${RUNNER_TEMP}/refuse.sh" <<'SH'
           #!/usr/bin/env bash
-          # refuse.sh <label> <command...>
-          label="$1"; shift
-          echo "--- ${label}"
+          # refuse.sh <label> <expected-action> <command...>
+          label="$1"; expected="$2"; shift 2
+          echo "--- ${label}  (expects a refusal naming ${expected})"
           echo "\$ $*"
           set +e
           output=$("$@" 2>&1)
@@ -97,7 +104,11 @@ jobs:
             echo "::error::${label} failed, but not with an authorization refusal. Broken test, not evidence."
             exit 1
           fi
-          echo "${label}: refused, as required."
+          if ! grep -qF "${expected}" <<<"${output}"; then
+            echo "::error::${label} was refused, but for '${expected}' nothing was named. The probe did not reach the boundary it claims to test."
+            exit 1
+          fi
+          echo "${label}: refused on ${expected}, as required."
           SH
           chmod +x "${RUNNER_TEMP}/refuse.sh"
 
@@ -105,6 +116,7 @@ jobs:
       - name: P1 - write at subscription scope
         run: |
           "${RUNNER_TEMP}/refuse.sh" P1 \
+            'Microsoft.Resources/subscriptions/resourcegroups/write' \
             az group create --name rg-ai300-denied-probe --location northeurope
 
       # Outside the scope: another NAMED container. A listing is deliberately
@@ -113,6 +125,7 @@ jobs:
       - name: P2 - read another named resource group
         run: |
           "${RUNNER_TEMP}/refuse.sh" P2 \
+            'Microsoft.Resources/subscriptions/resourcegroups/read' \
             az group show --name rg-ai300-probe
 
       # The sharpest of the four. The principal genuinely holds
@@ -122,6 +135,7 @@ jobs:
       - name: P3 - grant authority at subscription scope
         run: |
           "${RUNNER_TEMP}/refuse.sh" P3 \
+            'Microsoft.Authorization/roleAssignments/write' \
             az role assignment create \
               --role Reader \
               --assignee-object-id "${{ secrets.AZURE_CLIENT_OBJECT_ID }}" \
@@ -133,9 +147,16 @@ jobs:
       # narrow custom role buys. Microsoft.ManagedIdentity is registered on this
       # subscription, so a refusal here is an authorization refusal and not a
       # provider-registration error.
+      #
+      # `az rest` rather than `az identity create`: the convenience command
+      # reads the resource group first, and that read is itself refused, so the
+      # probe never reached the resource type it exists to test. One request,
+      # one authorization decision, on the axis actually claimed.
+      # API version resolved against the live provider - latest non-preview.
       - name: P4 - create an undeclared resource type inside the scope
         run: |
           "${RUNNER_TEMP}/refuse.sh" P4 \
-            az identity create \
-              --name id-ai300-denied-probe \
-              --resource-group rg-ai300-test01
+            'Microsoft.ManagedIdentity/userAssignedIdentities/write' \
+            az rest --method put \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-ai300-test01/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-ai300-denied-probe?api-version=2024-11-30" \
+              --body '{"location":"northeurope"}'

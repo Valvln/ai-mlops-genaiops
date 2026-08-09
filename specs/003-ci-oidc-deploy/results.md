@@ -200,7 +200,60 @@ Pending — T025.
 
 ## Pull requests validate, and do not deploy
 
-Pending — T029.
+Pull request **#6**, which modified `infra/ci-identity.bicep`,
+`.github/workflows/infra-deploy.yml`, `.github/workflows/bicep-validate.yml` and
+`.gitignore`.
+
+**The validation ran and passed**, run `31303183703`:
+
+```console
+$ gh pr checks 6
+az bicep build   pass   26s
+```
+
+Its build step now covers every template, which is the point of the widening:
+
+```text
+--- infra/ci-identity.bicep
+--- infra/main.bicep
+2 template(s) built.
+```
+
+**It held no ability to authenticate.** The run's own record of what its token
+was granted:
+
+```text
+##[group]GITHUB_TOKEN Permissions
+Contents: read
+Metadata: read
+##[endgroup]
+```
+
+No `id-token`. Without it the OIDC token cannot be requested at all, so the
+question of whether the subject would have matched never arises — the refusal
+happens one layer earlier than the trust condition.
+
+**The deploying workflow did not run**, and has never run for this event:
+
+```console
+$ gh run list --workflow infra-deploy.yml --event pull_request --json databaseId --jq 'length'
+0
+```
+
+### The limit of this evidence, stated rather than left implicit
+
+This pull request came from a branch in this repository, not from a fork. No
+second account was stood up to author a genuine fork pull request, so SC-005 is
+settled by what the repository observably ran plus the three independent
+barriers R6 documents — the deploying workflow subscribes to no `pull_request`
+event; a fork run cannot be granted `id-token: write`; and a fork subject would
+name a `pull_request` context rather than `environment:azure-deploy`, which the
+credential above cannot match.
+
+Three barriers, each sufficient alone. But the criterion was verified against
+the first two by observation and the third by reasoning, and that is weaker than
+a fork actually trying. The checklist records this; it belongs with the evidence
+too.
 
 ## Discovery
 

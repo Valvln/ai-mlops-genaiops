@@ -69,7 +69,36 @@ inadmissible under FR-006c.
 
 | Operation | Run that failed for want of it | Error excerpt |
 | --- | --- | --- |
-| | | |
+| `Microsoft.Resources/deployments/validate/action` | `31303220508` | `AuthorizationFailed … does not have authorization to perform action 'Microsoft.Resources/deployments/validate/action' over scope '…/deployments/ai300-ci-31303220508'` |
+| `Microsoft.KeyVault/vaults/read` | `31303489048` | `AuthorizationFailed … 'Microsoft.KeyVault/vaults/read' over scope '…/vaults/ai300kv2mgou37pfmjou'` |
+| `Microsoft.OperationalInsights/workspaces/read` | `31303489048` | `AuthorizationFailed … 'Microsoft.OperationalInsights/workspaces/read' over scope '…/workspaces/ai300law2mgou37pfmjou'` |
+| `Microsoft.MachineLearningServices/workspaces/read` | `31303655969` | `AuthorizationFailed … 'Microsoft.MachineLearningServices/workspaces/read' over scope '…/workspaces/ai300ml2mgou37pfmjou'` |
+| `Microsoft.Resources/deployments/read` | `31303842799` | `AuthorizationFailed … 'Microsoft.Resources/deployments/read' over scope '…/deployments/ai300-ci-31303842799'` |
+
+**Run `31303842799` deployed successfully and reported red.** Its deployment
+record is `Succeeded` in the history; the failure came afterwards, when the CLI
+tried to read the deployment back. Green is not evidence that something was
+deployed — which is why SC-001 asks for the record rather than the colour — and
+red is not evidence that nothing was. Both halves of that had to be checked
+against the history rather than inferred from the run.
+
+**This one was dropped above, and the drop was wrong.** R2 excluded
+`validate/action` by reasoning that it appeared in the activity log only because
+the author had run a preview by hand, and that the workflow performs no preview.
+The premise held; the conclusion did not. `az deployment group create` invokes
+`validate/action` itself before submitting the deployment, so the operation is
+required whether or not anybody asks for a preview.
+
+Worth recording plainly rather than quietly correcting: FR-006a forbids taking
+operations from documentation, and the reason is that predicting what a
+deployment needs is unreliable. That prohibition was honoured — and then the
+same unreliable prediction was made in the *opposite* direction, to remove an
+operation the log had actually recorded. Deriving is safe because it observes;
+subtracting from a derivation is a deduction, and deductions are what the
+verification pass exists to catch.
+
+`whatIf/action` remains dropped, and now on better grounds: this run reached the
+validation step without it.
 
 Operations *predicted* in R2 as likely to surface — reads on the declared types,
 `deployments/read`, `subscriptions/resourceGroups/read`,
