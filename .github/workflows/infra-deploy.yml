@@ -1,0 +1,141 @@
+name: Deploy infrastructure
+
+# Deploys infra/main.bicep as an identity that holds no secret. Two jobs, and
+# the split is the whole feature made legible:
+#
+#   deploy    red means the role is too NARROW - an operation is missing. That
+#             is the discovery method working, not a defect.
+#   boundary  red means the authority is too WIDE - a probe that should have
+#             been refused succeeded. That is a real defect.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'infra/**'
+  workflow_dispatch:
+
+# id-token to request the OIDC token, contents to check out the template.
+# Nothing else, and nothing is stored that could be replayed elsewhere.
+permissions:
+  contents: read
+  id-token: write
+
+# Queueing rather than cancelling: a cancelled deployment can leave the
+# environment partly applied, and during discovery a cancelled run produces an
+# error that reads like an authorization refusal. Slower and honest.
+concurrency:
+  group: infra-deploy
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy main.bicep
+    runs-on: ubuntu-latest
+    environment: azure-deploy
+    steps:
+      - name: Checkout
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      # No client secret and no certificate: the token is exchanged against a
+      # federated credential whose subject names this environment.
+      - name: Authenticate to Azure
+        uses: azure/login@858f4093d287a904987dfd22abd163280f939550 # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Install Bicep CLI
+        run: az bicep install
+
+      # A real deployment, recorded in the deployment history. Not a what-if,
+      # not a validate: FR-010 wants something to have happened, and SC-002
+      # checks the inventory directly rather than trusting a preview.
+      - name: Deploy
+        run: |
+          az deployment group create \
+            --resource-group rg-ai300-test01 \
+            --template-file infra/main.bicep \
+            --name "ai300-ci-${{ github.run_id }}"
+
+  boundary:
+    name: The four refusals
+    needs: deploy
+    runs-on: ubuntu-latest
+    environment: azure-deploy
+    steps:
+      - name: Authenticate to Azure
+        uses: azure/login@858f4093d287a904987dfd22abd163280f939550 # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      # A probe passes only when it exits non-zero AND the error names an
+      # authorization refusal. Exiting non-zero for any other reason - a bad
+      # name, an absent target, an unregistered provider - is a BROKEN TEST,
+      # not a held boundary, and fails the run just as loudly (FR-017).
+      - name: Write the assertion helper
+        run: |
+          cat > "${RUNNER_TEMP}/refuse.sh" <<'SH'
+          #!/usr/bin/env bash
+          # refuse.sh <label> <command...>
+          label="$1"; shift
+          echo "--- ${label}"
+          echo "\$ $*"
+          set +e
+          output=$("$@" 2>&1)
+          rc=$?
+          set -e
+          echo "${output}"
+          if [ "${rc}" -eq 0 ]; then
+            echo "::error::${label} SUCCEEDED. The authority is wider than declared."
+            exit 1
+          fi
+          if ! grep -qiE 'AuthorizationFailed|does not have authorization|Forbidden|\(403\)' <<<"${output}"; then
+            echo "::error::${label} failed, but not with an authorization refusal. Broken test, not evidence."
+            exit 1
+          fi
+          echo "${label}: refused, as required."
+          SH
+          chmod +x "${RUNNER_TEMP}/refuse.sh"
+
+      # Outside the scope: nothing is held above the resource group.
+      - name: P1 - write at subscription scope
+        run: |
+          "${RUNNER_TEMP}/refuse.sh" P1 \
+            az group create --name rg-ai300-denied-probe --location northeurope
+
+      # Outside the scope: another NAMED container. A listing is deliberately
+      # not used - the platform filters enumerations by permission, so it would
+      # return an empty set with exit code zero, which FR-017a rules out.
+      - name: P2 - read another named resource group
+        run: |
+          "${RUNNER_TEMP}/refuse.sh" P2 \
+            az group show --name rg-ai300-probe
+
+      # The sharpest of the four. The principal genuinely holds
+      # roleAssignments/write - main.bicep needs it - so this tests that the
+      # SCOPE bounds it. A principal that can assign roles at subscription
+      # scope can make itself Owner.
+      - name: P3 - grant authority at subscription scope
+        run: |
+          "${RUNNER_TEMP}/refuse.sh" P3 \
+            az role assignment create \
+              --role Reader \
+              --assignee-object-id "${{ secrets.AZURE_CLIENT_OBJECT_ID }}" \
+              --assignee-principal-type ServicePrincipal \
+              --scope "/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+
+      # Inside the scope, outside the authority. This is the axis a built-in
+      # general-management role would have left wide open, and it is what the
+      # narrow custom role buys. Microsoft.ManagedIdentity is registered on this
+      # subscription, so a refusal here is an authorization refusal and not a
+      # provider-registration error.
+      - name: P4 - create an undeclared resource type inside the scope
+        run: |
+          "${RUNNER_TEMP}/refuse.sh" P4 \
+            az identity create \
+              --name id-ai300-denied-probe \
+              --resource-group rg-ai300-test01
