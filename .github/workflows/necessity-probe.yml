@@ -41,12 +41,19 @@ jobs:
       # the token exchange must still succeed with the grant withdrawn, because
       # trust and authority are different things and this probe is about the
       # second one.
+      #
+      # subscription-id is deliberately NOT passed. With it, the action runs
+      # `az account set --subscription` after logging in, which fails on a
+      # subscription the account cannot enumerate - so login dies on the local
+      # account cache and the probe never reaches an authorization decision.
+      # That is the same class of client-side failure this workflow exists to
+      # get away from. The subscription id is still used below, in the request
+      # URL, where it names a target rather than selecting a context.
       - name: Authenticate to Azure
         uses: azure/login@858f4093d287a904987dfd22abd163280f939550 # v3.0.1
         with:
           client-id: ${{ secrets.AZURE_CLIENT_ID }}
           tenant-id: ${{ secrets.AZURE_TENANT_ID }}
-          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
           allow-no-subscriptions: true
 
       # The single operation the whole grant exists to permit. API version
