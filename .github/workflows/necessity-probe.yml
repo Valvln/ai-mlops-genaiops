@@ -1,0 +1,67 @@
+name: Necessity probe
+
+# TEMPORARY, and run exactly twice: once with the deployment identity's role
+# assignment WITHDRAWN, once with it restored.
+#
+# It exists because the obvious way to test necessity produced the wrong kind
+# of evidence. Withdrawing the grant and re-running the deploy workflow does
+# make the deployment fail - but it fails at `azure/login` with
+# "No subscriptions found", because a principal holding no role assignment
+# cannot see the subscription at all. That is an EMPTY ENUMERATION, and FR-017a
+# excludes exactly that: an empty result is indistinguishable from an empty
+# scope, and reading one as a refusal is how feature 002's SC-003 passed while
+# its objective was missed.
+#
+# So this workflow asks the question in a form that can only be answered by an
+# authorization decision:
+#
+#   allow-no-subscriptions  - login succeeds without enumerating anything, so
+#                             the trust condition is exercised and the
+#                             subscription cache is never consulted;
+#   az rest                 - one direct ARM request, so exactly one
+#                             authorization check happens and its answer is the
+#                             whole of the result.
+#
+# Deleted with the claims probe once both captures are recorded (tasks.md, T040).
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  necessity:
+    name: Can this identity create a deployment at all
+    runs-on: ubuntu-latest
+    environment: azure-deploy
+    steps:
+      # allow-no-subscriptions is what separates this from the deploy workflow:
+      # the token exchange must still succeed with the grant withdrawn, because
+      # trust and authority are different things and this probe is about the
+      # second one.
+      - name: Authenticate to Azure
+        uses: azure/login@858f4093d287a904987dfd22abd163280f939550 # v3.0.1
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          allow-no-subscriptions: true
+
+      # The single operation the whole grant exists to permit. API version
+      # resolved against the live provider - latest non-preview.
+      #
+      # With the grant withdrawn this must be refused, naming
+      # Microsoft.Resources/deployments/write. With it restored it must succeed.
+      # The run does not assert either outcome: both are informative, and which
+      # one is expected depends on state this workflow cannot see.
+      - name: Attempt to create a deployment
+        continue-on-error: true
+        run: |
+          set +e
+          az rest --method put \
+            --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-${{ github.run_id }}?api-version=2026-06-01" \
+            --body '{"properties":{"mode":"Incremental","template":{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}}}' \
+            2>&1
+          echo "exit=$?"
