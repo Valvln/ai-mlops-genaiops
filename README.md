@@ -148,16 +148,28 @@ The template still declares exactly one role assignment, on the Key Vault, and i
 
 So the next thing I build is not another attempt at this. It is the opposite case: a deployment identity for CI, through OIDC and federated credentials — a service principal I create, with a role I assign, at a scope I choose. Same exam objective, and this time least privilege is actually reachable. Holding those two side by side is what I expect to make the difference when a question asks which identity belongs where.
 
-### `.github/workflows/` — continuous validation
+### Deployment from CI, without a stored secret
 
-A GitHub Actions workflow that recompiles the Bicep template on every push and
-pull request touching `infra/`.
+I followed through on the previous phase's promise: same question, but with my own identity in place of the platform's. CI now deploys `main.bicep` authenticating over OIDC. There is no password and no certificate in the repository — they were never created, and I checked that after the deployment had already succeeded.
 
-It deliberately **requires no Azure credentials and performs no deployment**.
-This is syntactic and semantic validation only, which means it costs nothing,
-needs no secrets in the repository, and cannot accidentally provision anything.
-Azure CLI is preinstalled on GitHub's Ubuntu runners, so the job only installs
-the Bicep module and runs the build — a non-zero exit fails the job.
+The method was failing on purpose: I seeded the role with the eight operations the activity log had recorded, and let the deployment break five times; each error named what was missing, and I added only that. Two instructive errors: one put back an operation I had removed myself; the other was a successful deployment with a red run. Green does not prove something was deployed; red does not prove it wasn't.
+
+Then an interesting part: four commands that must be refused run inside the workflow on every deploy, and one of those four, the first time, passed without testing anything. Right exit code, right error class, wrong axis. I only saw it by reading the error instead of the green summary — a genuinely useful lesson.
+
+The same trap came back a third time, when I wanted to prove the grant is actually doing something. Withdrawing it and redeploying does fail — but it fails with "no subscriptions found". It took three attempts to get a real denial: every `az` command resolves something locally before asking Azure, and every local resolution is a failure. In the end it came out as an HTTP request: 403 without the grant, 201 with it, same request. That is the check 002 would not have passed.
+
+### `.github/workflows/` — validation and deployment
+
+**`bicep-validate.yml`** — recompiles every template under `infra/` on every push
+and pull request touching it. No Azure credentials, no deployment, no token
+permissions beyond reading the repository. A fork's pull request runs it
+unchanged.
+
+**`infra-deploy.yml`** — deploys `main.bicep` on a merge to `main` or on manual
+dispatch. Authenticates over OIDC against a federated credential bound to the
+`azure-deploy` environment, so a run that has not passed the approval gate cannot
+obtain a token. A second job runs the four boundary probes as assertions; a probe
+that succeeds fails the run.
 
 ## What is planned
 
@@ -176,8 +188,8 @@ through the exam objectives:
 
 ```bash
 az bicep install
-az bicep build --file infra/main.bicep
+for template in infra/*.bicep; do az bicep build --file "$template"; done
 ```
 
-An exit code of 0 means the template compiles. This requires no Azure
-subscription and costs nothing — it is the same check the CI workflow runs.
+An exit code of 0 means the templates compile. This requires no Azure
+subscription and costs nothing — it is the same check `bicep-validate.yml` runs.
