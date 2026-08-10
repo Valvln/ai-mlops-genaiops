@@ -266,6 +266,29 @@ Six resources before, six after, same names, same tiers.
 deployed `main.bicep` unchanged, both succeeded, and the inventory diff above
 was taken after the second.
 
+### Closing state, after everything
+
+Run `31374711441`, on `main` with the feature fully merged and both temporary
+probe workflows deleted. Both jobs green.
+
+```console
+$ az deployment group show -g rg-ai300-test01 -n ai300-ci-31374711441
+{"name": "ai300-ci-31374711441", "state": "Succeeded", "ts": "2026-08-10T09:34:32Z"}
+
+$ diff evidence/inventory-before.json evidence/inventory-final.json && echo unchanged
+unchanged
+
+P1: refused on Microsoft.Resources/subscriptions/resourcegroups/write
+P2: refused on Microsoft.Resources/subscriptions/resourcegroups/read
+P3: refused on Microsoft.Authorization/roleAssignments/write
+P4: refused on Microsoft.ManagedIdentity/userAssignedIdentities/write
+```
+
+Six resources at the start of the feature, six at the end, and the four
+refusals still land on the four axes they claim. This run came after the grant
+had been withdrawn and restored twice, which is the point of running it: the
+environment is left working, and verified so rather than assumed so.
+
 **Nothing the probes attempted exists:**
 
 ```console

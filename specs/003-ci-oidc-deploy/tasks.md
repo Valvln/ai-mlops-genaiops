@@ -207,7 +207,7 @@ criteria that can only be checked once everything else has happened.
 - [X] T042 Write the reversal into `infra/DEPLOY.md` as runnable commands — role assignment, role definition, federated credential, service principal, application, probe resource group, three secrets, environment — and confirm the count of removal commands matches the count of objects created (SC-009, FR-018). The reversal is recorded, not executed; the environment is left working.
 - [X] T043 Sweep `specs/003-ci-oidc-deploy/results.md` for full tenant, subscription, client or object identifiers and apply the redaction rule stated at the head of this file. `origin` is public, and R10's reasoning about not publishing identifiers applies to a tracked record as much as to repository variables. `evidence/` is left alone — it is gitignored and never leaves the machine.
 - [X] T044 Update `specs/003-ci-oidc-deploy/checklists/requirements.md`: close the two Deferred items (overlapping runs — settled by `cancel-in-progress: false`; where evidence is stored — settled by the `results.md` / `evidence/` split), and confirm the two recorded limits still read honestly.
-- [ ] T045 Draft candidate `README.md` text for the author covering feature 003 and its contrast with 002 — the author reviews, rewrites and commits it (Principle IV). Claude does not write the first-person account as though it were his.
+- [X] T045 Draft candidate `README.md` text for the author covering feature 003 and its contrast with 002 — the author reviews, rewrites and commits it (Principle IV). Claude does not write the first-person account as though it were his.
 - [X] T046 Walk [quickstart.md](quickstart.md) end to end against the finished state and correct anything it now describes wrongly.
 
 ---
