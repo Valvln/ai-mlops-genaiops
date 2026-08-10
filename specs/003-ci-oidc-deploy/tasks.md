@@ -113,11 +113,11 @@ both that the run is green and that `az deployment group list` shows a record
 named for that run whose state is `Succeeded`.
 
 - [X] T014 [US1] Write `.github/workflows/infra-deploy.yml` with the `deploy` job only: triggers `push` to `main` on `infra/**` plus `workflow_dispatch`, `environment: azure-deploy`, permissions `id-token: write` and `contents: read` and nothing else, `concurrency` with `cancel-in-progress: false`, actions pinned to the SHAs in [contracts/workflow-contract.md](contracts/workflow-contract.md), and a real `az deployment group create -n ai300-ci-<run_id>` — no preview, no what-if (FR-010).
-- [ ] T015 [US1] Run the workflow and read the failure. **This is expected**: the seeded role is known-incomplete because the activity log records no reads (R2). Add **only** the operation the error names to `infra/ci-identity.bicep`, add its row to the "Added by verification" table in [contracts/role-definition.md](contracts/role-definition.md) with the failing run id and the error excerpt, redeploy `ci-identity.bicep`, and run again. Repeat until green — expect two to four iterations.
-- [ ] T016 [US1] Before adding each operation in T015, confirm the failure is an authorization refusal that names it, and not a queued deployment, a transient error, or an unregistered provider (FR-017 applies to discovery as much as to the probes). Record any rejected candidate, with the reason, in `results.md` under **Discovery**.
-- [ ] T017 [US1] Record the green run id and the `Succeeded` deployment record in `results.md` under **It really deployed**, noting explicitly that the failed records above it are discovery evidence and not counted against SC-001.
-- [ ] T018 [US1] Capture `specs/003-ci-oidc-deploy/evidence/inventory-after.json` and diff it against `inventory-before.json`; record the empty diff in `results.md` under **It really deployed** (SC-002, FR-011).
-- [ ] T019 [US1] Re-run the workflow unchanged, confirm it succeeds again and that a second inventory capture still diffs clean, and record both run ids in `results.md` under **It really deployed** (FR-012).
+- [X] T015 [US1] Run the workflow and read the failure. **This is expected**: the seeded role is known-incomplete because the activity log records no reads (R2). Add **only** the operation the error names to `infra/ci-identity.bicep`, add its row to the "Added by verification" table in [contracts/role-definition.md](contracts/role-definition.md) with the failing run id and the error excerpt, redeploy `ci-identity.bicep`, and run again. Repeat until green — expect two to four iterations.
+- [X] T016 [US1] Before adding each operation in T015, confirm the failure is an authorization refusal that names it, and not a queued deployment, a transient error, or an unregistered provider (FR-017 applies to discovery as much as to the probes). Record any rejected candidate, with the reason, in `results.md` under **Discovery**.
+- [X] T017 [US1] Record the green run id and the `Succeeded` deployment record in `results.md` under **It really deployed**, noting explicitly that the failed records above it are discovery evidence and not counted against SC-001.
+- [X] T018 [US1] Capture `specs/003-ci-oidc-deploy/evidence/inventory-after.json` and diff it against `inventory-before.json`; record the empty diff in `results.md` under **It really deployed** (SC-002, FR-011).
+- [X] T019 [US1] Re-run the workflow unchanged, confirm it succeeds again and that a second inventory capture still diffs clean, and record both run ids in `results.md` under **It really deployed** (FR-012).
 
 **Checkpoint**: US1 stands alone — CI deploys, with no credential in existence.
 Nothing yet proves it cannot do more.
@@ -134,9 +134,9 @@ would have turned the job red.
 
 - [X] T020 [US2] Add the `boundary` job to `.github/workflows/infra-deploy.yml`: runs after `deploy`, same environment, same principal, executing probes P1–P4 exactly as written in [contracts/boundary-probes.md](contracts/boundary-probes.md).
 - [X] T021 [US2] Implement the assertion rule in that job: a probe passes only when the command exits non-zero **and** its stderr names an authorization refusal. A probe that succeeds fails the run; a probe that fails for any other reason also fails the run (FR-017a). This is what makes SC-003 a standing test rather than a one-day capture.
-- [ ] T022 [US2] Run the workflow and copy the four commands and their errors verbatim into `results.md` under **Four authorization refusals**, one section per probe, with the run id — the exact command and the exact error, not a description of why the configuration forbids it (FR-016).
-- [ ] T023 [US2] For each of the four, state in the same file which axis it settles — P1, P2, P3 outside the scope; P4 inside the scope and outside the authority — and confirm none was satisfied by an empty result (FR-017a, SC-003).
-- [ ] T024 [US2] If any probe unexpectedly succeeded, delete what it created immediately, record the fact as a defect in `results.md` under **Four authorization refusals**, and narrow `infra/ci-identity.bicep` before continuing. A widened boundary is the one failure mode of this feature that is not normal.
+- [X] T022 [US2] Run the workflow and copy the four commands and their errors verbatim into `results.md` under **Four authorization refusals**, one section per probe, with the run id — the exact command and the exact error, not a description of why the configuration forbids it (FR-016).
+- [X] T023 [US2] For each of the four, state in the same file which axis it settles — P1, P2, P3 outside the scope; P4 inside the scope and outside the authority — and confirm none was satisfied by an empty result (FR-017a, SC-003).
+- [X] T024 [US2] If any probe unexpectedly succeeded, delete what it created immediately, record the fact as a defect in `results.md` under **Four authorization refusals**, and narrow `infra/ci-identity.bicep` before continuing. A widened boundary is the one failure mode of this feature that is not normal.
 
 **Checkpoint**: the boundary is demonstrated, and demonstrated on every future
 run.
@@ -152,10 +152,10 @@ decision.
 error. An authorization error anywhere here would mean the context was trusted
 after all — a finding, not a pass.
 
-- [ ] T025 [US3] Re-run `oidc-claims-probe.yml` on `main` **now that the federated credential exists**, with an `azure/login` step and no `environment:`, and capture the refusal in `results.md` under **Three authentication refusals** as A1. This is the sharp version of SC-004's first refusal: correct repository, correct branch, gate not passed. The setup-time failure from T008 is the weak version — it proves only that nothing was configured yet — and is recorded alongside it as such. The run needs no gate approval, precisely because it does not enter the environment.
-- [ ] T026 [US3] Run the same probe from the feature branch rather than `main`, so the subject names a `ref` context that satisfies the trust condition not at all, and capture the refusal as A2 in `results.md` under **Three authentication refusals**.
-- [ ] T027 [US3] Attempt `az login --service-principal` from the author's machine using only the three stored identifiers and a junk federated token, and capture the refusal as A3 in the same file (SC-004 #3, the check that settles R10's claim).
-- [ ] T028 [US3] Confirm in `results.md` under **Three authentication refusals** that all three errors are authentication errors — `AADSTS…`, not `AuthorizationFailed` — and say so explicitly, since the distinction is the entire content of the criterion.
+- [X] T025 [US3] Re-run `oidc-claims-probe.yml` on `main` **now that the federated credential exists**, with an `azure/login` step and no `environment:`, and capture the refusal in `results.md` under **Three authentication refusals** as A1. This is the sharp version of SC-004's first refusal: correct repository, correct branch, gate not passed. The setup-time failure from T008 is the weak version — it proves only that nothing was configured yet — and is recorded alongside it as such. The run needs no gate approval, precisely because it does not enter the environment.
+- [X] T026 [US3] Run the same probe from the feature branch rather than `main`, so the subject names a `ref` context that satisfies the trust condition not at all, and capture the refusal as A2 in `results.md` under **Three authentication refusals**.
+- [X] T027 [US3] Attempt `az login --service-principal` from the author's machine using only the three stored identifiers and a junk federated token, and capture the refusal as A3 in the same file (SC-004 #3, the check that settles R10's claim).
+- [X] T028 [US3] Confirm in `results.md` under **Three authentication refusals** that all three errors are authentication errors — `AADSTS…`, not `AuthorizationFailed` — and say so explicitly, since the distinction is the entire content of the criterion.
 
 **Checkpoint**: what the identity may do is bounded, and who may become it is
 bounded.
@@ -170,10 +170,10 @@ from it.
 **Independent Test**: open a pull request touching `infra/` and read which
 workflows ran for it.
 
-- [ ] T029 [US4] Open a pull request that modifies something under `infra/`, confirm `bicep-validate.yml` runs green — including on `ci-identity.bicep`, which T012 brought into its build scope — and record the run id in `results.md` under **Pull requests validate, and do not deploy**.
-- [ ] T030 [US4] Confirm with `gh run list --workflow infra-deploy.yml --event pull_request` that the deploying workflow has **no** run for that event, and record the empty result in `results.md` under **Pull requests validate, and do not deploy** (SC-005, FR-014).
-- [ ] T031 [US4] Read the validation run's own log of granted token permissions and record in the same file that it holds no `id-token` permission and reads no stored value (FR-013, US4 scenario 3).
-- [ ] T032 [US4] Record in `results.md` under **Pull requests validate, and do not deploy** the limit this evidence has: no genuine fork pull request was authored, so SC-005 is settled by what the repository runs plus the three independent barriers in R6 — not by a fork actually trying. The checklist already carries this; it belongs with the evidence too.
+- [X] T029 [US4] Open a pull request that modifies something under `infra/`, confirm `bicep-validate.yml` runs green — including on `ci-identity.bicep`, which T012 brought into its build scope — and record the run id in `results.md` under **Pull requests validate, and do not deploy**.
+- [X] T030 [US4] Confirm with `gh run list --workflow infra-deploy.yml --event pull_request` that the deploying workflow has **no** run for that event, and record the empty result in `results.md` under **Pull requests validate, and do not deploy** (SC-005, FR-014).
+- [X] T031 [US4] Read the validation run's own log of granted token permissions and record in the same file that it holds no `id-token` permission and reads no stored value (FR-013, US4 scenario 3).
+- [X] T032 [US4] Record in `results.md` under **Pull requests validate, and do not deploy** the limit this evidence has: no genuine fork pull request was authored, so SC-005 is settled by what the repository runs plus the three independent barriers in R6 — not by a fork actually trying. The checklist already carries this; it belongs with the evidence too.
 
 ---
 
