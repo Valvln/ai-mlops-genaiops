@@ -518,7 +518,171 @@ unattended.
 
 ---
 
-## 5. Teardown
+## 5. Deploying from continuous integration
+
+Since feature 003 this template is also deployed by GitHub Actions, as an
+identity that holds no secret. Everything below was built and verified against
+this subscription; the full evidence is in
+`specs/003-ci-oidc-deploy/results.md`.
+
+### What exists, and who made it
+
+Nothing here is created by continuous integration. It cannot create the
+authority it runs with, and it is not permitted to.
+
+| Object | Where | Created by |
+| --- | --- | --- |
+| Application `ai300-github-deploy` + service principal | Entra | author, `az ad` |
+| Federated credential `github-azure-deploy-environment` | Entra | author, `az ad` |
+| Environment `azure-deploy` + four repository secrets | GitHub | author |
+| Custom role `AI300 CI Deployer (rg-ai300-test01)` + assignment | ARM | author, `infra/ci-identity.bicep` |
+| Probe resource group `rg-ai300-probe` | ARM | author, `az group create` |
+
+The application has **zero password credentials and zero certificate
+credentials**, and always has. The four secrets are identifiers — which
+application, which directory, which subscription, which principal — and confer
+nothing without a token from the trusted issuer.
+
+### The order matters, and getting it wrong costs an approval each time
+
+1. Application → service principal.
+2. GitHub environment `azure-deploy`: required reviewer, **`Prevent self-review`
+   off**, deployment branches limited to `main`. With one author, enabling
+   self-review prevention makes every deployment permanently unapprovable.
+3. Store the identifiers as repository secrets.
+4. **Run `oidc-claims-probe.yml` and read the subject a token actually carries.**
+5. Create the federated credential from that observed value.
+6. `az deployment group create -g rg-ai300-test01 -f infra/ci-identity.bicep
+   --parameters principalId=<service principal OBJECT id>`.
+
+Step 6 wants the **service principal object id**, not the application (client)
+id. A role assignment against a client id points at a principal that does not
+exist and fails in a way that does not say so.
+
+### Do not write the OIDC subject from documentation
+
+This repository was created on 2026-08-05, after GitHub's immutable-subject
+cutover, so its tokens carry numeric owner and repository ids:
+
+```text
+repo:Valvln@188171957/ai-mlops-genaiops@1324268843:environment:azure-deploy
+```
+
+The conventional `repo:OWNER/REPO:environment:NAME` form does **not** match here.
+A mismatch surfaces as `AADSTS700213: No matching federated identity record
+found for presented assertion subject '…'`, with the subject quoted back — so
+read the quoted value and compare it to the credential rather than searching for
+a typo in the environment name.
+
+The subject binds to the **environment**, not to a branch. A run that has not
+entered `azure-deploy` carries `…:ref:refs/heads/main` instead and cannot
+exchange its token at all. The approval gate is therefore enforced by Entra, not
+only by GitHub.
+
+### ⚠️ When `main.bicep` gains a resource type, the next deployment will fail
+
+This is the designed behaviour, not a defect, and it is the cost of a role
+narrow enough to be worth having.
+
+The CI role permits thirteen operations and no more. It carries no wildcard, no
+`delete`, and nothing for resource types the template does not declare. Add a
+resource type and the deployment stops with:
+
+```text
+AuthorizationFailed … does not have authorization to perform action
+'<the operation>' over scope '…'
+```
+
+**The fix is to add exactly the operation the error names**, to
+`verifiedActions` in `infra/ci-identity.bicep`, with the failing run id recorded
+as its provenance in
+`specs/003-ci-oidc-deploy/contracts/role-definition.md`. Then redeploy
+`ci-identity.bicep` as the author and run the workflow again.
+
+Do not reach for a built-in role. `Contributor`, or `Role Based Access Control
+Administrator`, would end the interruption and also end the property the
+narrowness exists for — probe P4 would begin to succeed, and the boundary job
+would go red for a good reason.
+
+### Reading a red run correctly
+
+| Red job | Meaning |
+| --- | --- |
+| `deploy` | the role is too **narrow** — an operation is missing. Ordinary. |
+| `boundary` | the role is too **wide** — a probe succeeded. A real defect. |
+
+And two traps observed during the work, both worth knowing before debugging:
+
+- **A green run is not proof that something was deployed**, and **a red run is
+  not proof that nothing was.** Run `31303842799` deployed successfully and then
+  failed reading the deployment back. Check
+  `az deployment group list -g rg-ai300-test01` before concluding anything.
+- **An `az` command that fails may never have reached Azure.** The CLI resolves
+  the subscription from a local account cache first; with no role assignment that
+  cache is empty and the failure is client-side. `No subscriptions found` and
+  `Subscription not found` are both this, and neither is an authorization
+  refusal.
+
+### 5.1 Reversal — undoing feature 003 completely
+
+Twelve objects were created; twelve commands remove them. Running all of them
+returns the repository and the subscription to their state before feature 003,
+and leaves `main.bicep` and its resources untouched.
+
+```bash
+export PATH="/usr/local/bin:$PATH"
+SP_OBJECT_ID=<service principal object id>
+SUB=<subscription id>
+APP_ID=<application client id>
+
+# 1. The role assignment
+az role assignment delete --assignee-object-id "$SP_OBJECT_ID" \
+  --scope "/subscriptions/$SUB/resourceGroups/rg-ai300-test01"
+
+# 2. The custom role definition
+az role definition delete --name "AI300 CI Deployer (rg-ai300-test01)"
+
+# 3. The federated credential
+az ad app federated-credential delete --id "$APP_ID" \
+  --federated-credential-id github-azure-deploy-environment
+
+# 4. The service principal
+az ad sp delete --id "$APP_ID"
+
+# 5. The application registration
+az ad app delete --id "$APP_ID"
+
+# 6. The probe resource group
+az group delete --name rg-ai300-probe --yes --no-wait
+
+# 7-10. The four repository secrets
+gh secret delete AZURE_CLIENT_ID        -R Valvln/ai-mlops-genaiops
+gh secret delete AZURE_TENANT_ID        -R Valvln/ai-mlops-genaiops
+gh secret delete AZURE_SUBSCRIPTION_ID  -R Valvln/ai-mlops-genaiops
+gh secret delete AZURE_CLIENT_OBJECT_ID -R Valvln/ai-mlops-genaiops
+
+# 11. The GitHub environment, and with it the approval gate
+gh api --method DELETE repos/Valvln/ai-mlops-genaiops/environments/azure-deploy
+
+# 12. The deploying workflow
+git rm .github/workflows/infra-deploy.yml
+```
+
+Deleting the role assignment (1) alone is enough to stop CI deploying, and is
+the right first move if something is wrong and the cause is not yet known. It is
+reversible by redeploying `ci-identity.bicep`.
+
+Steps 4 and 5 are **not** reversible: a new application gets a new client id, so
+the secrets and the federated credential would have to be recreated. Nothing is
+soft-deleted and no name is held — unlike the Key Vault, this feature walks
+through no one-way doors.
+
+`infra/ci-identity.bicep` may be left in place after a reversal. It deploys
+nothing on its own and documents what the authority was.
+
+---
+
+## 6. Teardown
 
 Deleting the resource group removes the billable surface in one command:
 
@@ -564,3 +728,10 @@ vaults.
 - [x] System data stores switched from account keys to the workspace identity
 - [ ] Whether a user-assigned identity escapes the platform's automatic grants —
       **untested hypothesis**, not a finding
+- [x] Continuous integration deploys this template with no stored secret, as an
+      identity scoped to one resource group — see section 5
+- [x] That identity's authority proven bounded by four refused actions, asserted
+      on every run rather than captured once
+- [x] That identity's grant proven load-bearing: 403 without it, 201 with it,
+      same request
+- [x] Reversal for feature 003 written as twelve runnable commands — section 5.1
