@@ -80,8 +80,11 @@ only when none fits.
 
 - Azure region: use **`northeurope`**. `westeurope` rejects this subscription
   with `RequestDisallowedByAzure` — it is not accepting new customers.
-- Generated artifacts are never tracked: `infra/main.json` is a build output,
-  `main.bicep` is the source of truth.
+- Generated artifacts are never tracked: `infra/*.json` are build outputs, the
+  `.bicep` files are the source of truth.
+- **`gh` needs `-R Valvln/ai-mlops-genaiops`.** There are two remotes — `origin`
+  (public) and `study` (private) — so `gh` refuses to guess. Getting this wrong
+  is how study material or secrets reach the wrong repository.
 
 ## Before touching Azure
 
@@ -97,6 +100,18 @@ into:
 - **`az bicep build` proves the template compiles, not that it deploys.** Region
   eligibility and resource-name length limits are invisible to it. Only
   `az deployment group what-if` against the live subscription catches them.
+- **CI deploys `main.bicep` now, through an approval gate.** A push to `main`
+  touching `infra/**` starts `infra-deploy.yml`, which waits for a human
+  approval. Never approve a deployment gate on the author's behalf — the gate
+  exists to put a human decision in front of every deploy.
+- **The CI role permits a fixed set of operations.** Adding a resource type to
+  `main.bicep` **will** fail the next deployment with `AuthorizationFailed`.
+  That is designed behaviour, not a defect: add the operation the error names to
+  `infra/ci-identity.bicep` with the failing run as its provenance. Never widen
+  it with a built-in role. See `infra/DEPLOY.md` § 5.
+- **A failing `az` command may never have reached Azure.** The CLI resolves the
+  subscription from a local account cache first. `No subscriptions found` and
+  `Subscription not found` are client-side, and are not authorization refusals.
 
 ## Personal study material
 

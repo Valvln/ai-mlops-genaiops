@@ -550,7 +550,26 @@ nothing without a token from the trusted issuer.
    off**, deployment branches limited to `main`. With one author, enabling
    self-review prevention makes every deployment permanently unapprovable.
 3. Store the identifiers as repository secrets.
-4. **Run `oidc-claims-probe.yml` and read the subject a token actually carries.**
+4. **Read the subject a token actually carries** — do not construct it. Feature
+   003 used a temporary `oidc-claims-probe.yml` for this and deleted it
+   afterwards, because a workflow that requests a token outside the gate should
+   not outlive its reason for existing. To do it again, add a workflow with
+   `id-token: write` and a job carrying `environment: azure-deploy`, then:
+
+   ```yaml
+   - run: |
+       set -euo pipefail
+       TOKEN=$(curl -sS -H "Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}" \
+         "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=api://AzureADTokenExchange" | jq -r '.value')
+       echo "::add-mask::${TOKEN}"
+       TOKEN="${TOKEN}" python3 -c 'import base64,json,os
+       p=os.environ["TOKEN"].split(".")[1]; p+="="*(-len(p)%4)
+       c=json.loads(base64.urlsafe_b64decode(p))
+       print({k:c[k] for k in ("sub","aud","iss")})'
+   ```
+
+   Only the three claims are printed. The token itself never is.
+
 5. Create the federated credential from that observed value.
 6. `az deployment group create -g rg-ai300-test01 -f infra/ci-identity.bicep
    --parameters principalId=<service principal OBJECT id>`.

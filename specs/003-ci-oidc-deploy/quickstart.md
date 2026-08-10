@@ -172,10 +172,11 @@ The API rate-limits aggressively: a second query within a minute or two returns
 ### SC-009 — the reversal runs
 
 Every step in the reversal is a command, and the count of removal commands
-matches the count of objects created — seven, per
-[data-model.md](data-model.md). The reversal is recorded in `infra/DEPLOY.md`
-and is not executed as part of closing the feature; the environment is left
-working.
+matches the count of objects created — **twelve**, in `infra/DEPLOY.md` § 5.1.
+Twelve rather than the seven object types in [data-model.md](data-model.md),
+because each of the four stored identifiers, the environment and the deploying
+workflow needs its own removal command. The reversal is recorded and is **not
+executed** as part of closing the feature; the environment is left working.
 
 ## The two failure modes to expect, and not mistake for defects
 

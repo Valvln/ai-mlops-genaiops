@@ -83,7 +83,18 @@ exists (FR-017b). Free. Removed by the reversal.
 | Control plane | Objects | Created by |
 | --- | --- | --- |
 | Entra (directory) | 1, 2, 3 | author, `az ad` commands |
-| GitHub | 4, plus the three stored identifiers | author, `gh` / repository settings |
+| GitHub | 4, plus the stored identifiers | author, `gh` / repository settings |
+
+> **Observed, 2026-08-10.** The identifiers are **four**, not three. Probe P3
+> attempts a role assignment and needs an assignee object id; the principal
+> cannot look its own up, holding no directory permission, so
+> `AZURE_CLIENT_OBJECT_ID` joined the other three. It confers nothing on its
+> own, which is what SC-004's third refusal tests — now over four values.
+>
+> Counting for SC-009 differs from the seven objects listed above, and
+> deliberately: the reversal removes **twelve** things, because the four
+> identifiers, the environment and the deploying workflow each need their own
+> command. See `infra/DEPLOY.md` § 5.1.
 | Azure ARM | 5, 6, 7 | author — 5 and 6 via `ci-identity.bicep`, 7 by command |
 
 **Nothing in this table is created by continuous integration.** CI deploys

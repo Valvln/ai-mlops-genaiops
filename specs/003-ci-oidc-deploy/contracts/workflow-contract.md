@@ -80,6 +80,10 @@ The readable tag stays in a trailing comment so the pin is auditable.
 | `AZURE_CLIENT_ID` | secret | no — an identifier |
 | `AZURE_TENANT_ID` | secret | no — an identifier |
 | `AZURE_SUBSCRIPTION_ID` | secret | no — an identifier |
+| `AZURE_CLIENT_OBJECT_ID` | secret | no — an identifier |
+
+`AZURE_CLIENT_OBJECT_ID` was added during implementation: probe P3 needs an
+assignee object id, and the principal cannot read its own from the directory.
 
 Nothing else. No password, no certificate, no connection string. SC-004's third
 refusal proves that holding all three grants nothing.

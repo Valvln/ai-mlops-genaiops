@@ -165,6 +165,13 @@ matches. The failure surfaces as `AADSTS70021: No matching federated identity
 record found`, which reads like a typo in the environment name and would be
 debugged in the wrong place.
 
+> **Observed, 2026-08-10.** The subject format predicted here was correct. The
+> error code was not: the real one is **`AADSTS700213`**, and it quotes the
+> presented subject back in the message — which makes a mismatch
+> self-diagnosing rather than something to hunt for elsewhere. `AADSTS70025`
+> is the different case where *no* federated credential exists at all. Both
+> captured in [results.md](results.md).
+
 **Decision — do not construct the subject from documentation either.** The first
 workflow run requests a token and prints **only** its `sub`, `aud` and `iss`
 claims; the federated credential is created from the observed value. This is the
