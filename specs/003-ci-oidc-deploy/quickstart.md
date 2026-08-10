@@ -140,13 +140,34 @@ again to confirm the deployment still passes.
 
 ### SC-008 — cost
 
+**Not `az consumption usage list`.** On this subscription it returns usage
+records with `pretaxCost: None` and no meter names — a table of nulls, which is
+an absence of data and reads far too easily as a zero. Use the Cost Management
+query API, which returns figures:
+
 ```bash
-az consumption usage list --start-date 2026-08-09 --end-date <closing-date> \
-  --query "[?pretaxCost!='0'].{meter:meterDetails.meterName, cost:pretaxCost}" -o table
+cat > query.json <<'JSON'
+{"type":"ActualCost","timeframe":"Custom",
+ "timePeriod":{"from":"2026-08-08T00:00:00Z","to":"2026-08-10T23:59:59Z"},
+ "dataset":{"granularity":"None",
+   "aggregation":{"totalCost":{"name":"PreTaxCost","function":"Sum"}},
+   "grouping":[{"type":"Dimension","name":"ServiceName"}]}}
+JSON
+
+az rest --method post \
+  --url "https://management.azure.com/subscriptions/<sub>/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --body @query.json
 ```
 
-Passes when no meter appears that was not already present, and the total
-attributable to this feature is `0.00`.
+Run it **twice** — once over days before the feature, once over the feature's
+own days. A single total cannot settle "no meter that was not already present";
+only the comparison can.
+
+Passes when the two windows show the same services and the feature's total
+rounds to `0.00`.
+
+The API rate-limits aggressively: a second query within a minute or two returns
+`429 Too Many Requests`. Wait rather than concluding the data is missing.
 
 ### SC-009 — the reversal runs
 

@@ -56,6 +56,36 @@ rather than three.
 
 No password, no certificate, no connection string.
 
+### R10's reasoning was partly wrong, and the decision survives it
+
+R10 chose secrets over repository variables partly on this ground: storing them
+as variables *"publishes a tenant and subscription identifier on a public
+repository for no gain"*.
+
+The subscription identifier was already published. `infra/DEPLOY.md` has carried
+it in plain text since feature 001, and `specs/002-…/research.md` carries the
+workspace identity's object id:
+
+```console
+$ git grep -noE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" -- '*.md'
+infra/DEPLOY.md:7:5900fbc9-…
+specs/003-ci-oidc-deploy/research.md:91:85e8321f-…
+```
+
+So the avoided harm was already incurred, and the argument for secrets was
+carrying weight it did not have.
+
+The decision still stands, on the reason that always did the real work: these
+values are **not credentials**, so FR-001 is indifferent to which box they sit
+in, and secrets are the conventional home at no cost. What changes is only the
+justification — and it is recorded here rather than quietly corrected, because a
+feature that spent five runs refusing to accept plausible reasoning in place of
+observation should hold its own reasoning to the same standard.
+
+Whether `DEPLOY.md` should be redacted is a separate decision, and the author's:
+a subscription id is not a credential either, and nothing here depends on it
+being secret.
+
 ---
 
 ## No credential ever existed
@@ -69,8 +99,26 @@ $ az ad app credential list --id <client-id> --cert --query 'length(@)' -o tsv
 0
 ```
 
-*After* half pending — it is taken once a deployment has demonstrably succeeded,
-because that is what makes it mean anything (SC-006).
+**After** — 2026-08-10T08:40:54Z, once the deployment had demonstrably
+succeeded:
+
+```console
+$ az ad app credential list --id <client-id> --query 'length(@)' -o tsv
+0
+$ az ad app credential list --id <client-id> --cert --query 'length(@)' -o tsv
+0
+$ az ad app federated-credential list --id <client-id> --query 'length(@)' -o tsv
+1
+```
+
+Zero passwords, zero certificates, one federated credential — which is not a
+secret but a trust condition: it holds no material an attacker could copy, only
+a statement about which runs may present a token.
+
+The ordering is what makes this mean anything. SC-001 passed first, so the
+deployment demonstrably happened while no secret existed. Enumerating an empty
+credential list on an identity that had never deployed would prove nothing at
+all.
 
 ---
 
@@ -592,4 +640,41 @@ came back belonged to a boundary nobody was testing.
 
 ## Cost
 
-Pending — T039.
+Two windows compared, because SC-008 asks for **no meter that was not already
+present** — a total alone would not settle that.
+
+| Service | 2026-08-07 → 08-08, before | 2026-08-08 → 08-10, during |
+| --- | --- | --- |
+| Storage | 0.00047445 | 0.00048324 |
+| Key Vault | 0.00003163 | 0.00001054 |
+| Bandwidth | 0.00000009 | 0.00000011 |
+| **Total** | **0.00050617 EUR** | **0.00049389 EUR** |
+
+The same three services appear in both, and both totals round to **0.00 EUR**.
+No meter appeared that was not already there, and the cost during the feature is
+marginally *lower* than before it — these are the pre-existing resources from
+feature 001 ticking over, not anything 003 introduced.
+
+That is the expected result rather than a lucky one. Everything this feature
+created is control-plane metadata or a free-tier feature: an application
+registration, a federated credential, a role definition, a role assignment, an
+empty resource group, GitHub environments and Actions minutes on a public
+repository. The probes were chosen so that even an unexpected *success* would
+create nothing billable (R7), and none of them succeeded.
+
+### A note on how this was measured
+
+`az consumption usage list` returned 12 usage records for the window with
+`pretaxCost: None` and no meter names — on this subscription it reports usage
+without cost. The figures above come from the Cost Management query API instead:
+
+```console
+$ az rest --method post \
+    --url "https://management.azure.com/subscriptions/5900fbc9-…/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+    --body @query.json
+```
+
+Worth recording because quickstart.md names the `az consumption` command, and
+following it would produce a table of nulls that could be misread as zero. Nulls
+are an absence of data; zero is a measurement. The two must not be confused —
+which is the same distinction this feature spent three attempts on elsewhere.
