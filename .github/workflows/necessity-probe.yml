@@ -59,16 +59,37 @@ jobs:
       # The single operation the whole grant exists to permit. API version
       # resolved against the live provider - latest non-preview.
       #
+      # Issued with curl rather than `az rest`, and that is the third attempt at
+      # this step rather than a preference. Every `az` command resolves the
+      # subscription from the local account cache before sending anything, and
+      # with the grant withdrawn that cache is empty - so the CLI failed with
+      # "Subscription not found" and the request never left the runner. Twice,
+      # in two different disguises. A raw HTTP request has no local state to
+      # fail on: one call, one authorization decision, and the answer is the
+      # whole of the result.
+      #
       # With the grant withdrawn this must be refused, naming
       # Microsoft.Resources/deployments/write. With it restored it must succeed.
-      # The run does not assert either outcome: both are informative, and which
-      # one is expected depends on state this workflow cannot see.
+      # The step asserts neither: which outcome is correct depends on state this
+      # workflow cannot see, and inventing an expectation here would be the same
+      # mistake as asserting a refusal without checking what was refused.
       - name: Attempt to create a deployment
         continue-on-error: true
+        env:
+          SUB: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+          TENANT: ${{ secrets.AZURE_TENANT_ID }}
         run: |
+          set -euo pipefail
+          TOKEN=$(az account get-access-token --tenant "${TENANT}" \
+            --resource https://management.azure.com --query accessToken -o tsv)
+          echo "::add-mask::${TOKEN}"
+          url="https://management.azure.com/subscriptions/${SUB}/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-${{ github.run_id }}?api-version=2026-06-01"
+          body='{"properties":{"mode":"Incremental","template":{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}}}'
+          echo "PUT ${url}"
           set +e
-          az rest --method put \
-            --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-${{ github.run_id }}?api-version=2026-06-01" \
-            --body '{"properties":{"mode":"Incremental","template":{"$schema":"https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#","contentVersion":"1.0.0.0","resources":[]}}}' \
-            2>&1
-          echo "exit=$?"
+          curl -sS -w '\nHTTP %{http_code}\n' -X PUT \
+            -H "Authorization: Bearer ${TOKEN}" \
+            -H "Content-Type: application/json" \
+            -d "${body}" \
+            "${url}"
+          set -e
