@@ -98,15 +98,40 @@ abandoning FR-006a, FR-006c, and FR-008 — the same shape of mistake as 002's
 SC-003. FR-006c is the guard: every operation must trace to a derivation-record
 line or a verification failure.
 
-### Deferred, deliberately
+### Deferred, deliberately — both now closed
 
 Two lower-impact items were left for the plan rather than spent as clarification
-questions:
+questions. Both were settled during implementation:
 
-- **Overlapping runs.** The edge case is recorded; no requirement constrains it.
-  A serialisation control is a plan-level default, but it interacts with FR-017 —
-  a deployment that failed because another was in flight can read like an
-  authorization refusal and must not be mistaken for one during discovery.
-- **Where evidence is stored.** FR-016 says what must be captured, not where.
-  Feature 002 used an `evidence/` directory in the feature folder; following that
-  is a plan decision.
+- **Overlapping runs.** ✅ Settled by `concurrency: cancel-in-progress: false` in
+  `infra-deploy.yml`. Queueing rather than cancelling, precisely because of the
+  FR-017 interaction noted here: a cancelled run produces an error that reads
+  like an authorization refusal.
+- **Where evidence is stored.** ✅ Settled as a split. `specs/**/evidence/` is
+  gitignored by repository convention, so raw captures stay local and
+  `results.md` — tracked and redacted — carries the commands and errors the
+  criteria are read from. Following 002 exactly would have left this feature's
+  exit criterion unreadable to anyone but the author.
+
+### Closed after implementation (2026-08-10)
+
+**The two recorded limits still read honestly.** SC-005 was settled by a
+same-repository pull request plus the three barriers in R6, not by a genuine
+fork — `results.md` repeats the limit alongside the evidence. The approval gate
+remained a deliberate pause: `prevent_self_review` is off, and the author
+approved every one of the eleven gated runs.
+
+**"Watch during planning" held.** The operation list was not pre-computed. Five
+deployments failed, each naming what it lacked, and the role grew from eight
+operations to thirteen. FR-006c did real work: `validate/action` had been
+*removed* from the derived set by reasoning, and the first failure put it back.
+
+**One thing this checklist did not anticipate.** It guarded against a plan that
+would satisfy FR-006 in form while abandoning its substance. The failure that
+actually occurred was one layer down: probe P4 satisfied the *assertion* in form
+— non-zero exit, authorization error — while testing an axis nobody had asked
+about, because `az identity create` failed on a preliminary resource-group read.
+Writing a criterion that cannot be met vacuously is hard; writing an assertion
+that cannot *pass* vacuously turned out to be harder, and being alert to the
+failure mode was not enough to prevent it. What caught it was reading the
+captured error rather than the pass/fail summary.

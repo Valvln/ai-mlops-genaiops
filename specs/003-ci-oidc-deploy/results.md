@@ -56,6 +56,36 @@ rather than three.
 
 No password, no certificate, no connection string.
 
+### R10's reasoning was partly wrong, and the decision survives it
+
+R10 chose secrets over repository variables partly on this ground: storing them
+as variables *"publishes a tenant and subscription identifier on a public
+repository for no gain"*.
+
+The subscription identifier was already published. `infra/DEPLOY.md` has carried
+it in plain text since feature 001, and `specs/002-…/research.md` carries the
+workspace identity's object id:
+
+```console
+$ git grep -noE "[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}" -- '*.md'
+infra/DEPLOY.md:7:5900fbc9-…
+specs/003-ci-oidc-deploy/research.md:91:85e8321f-…
+```
+
+So the avoided harm was already incurred, and the argument for secrets was
+carrying weight it did not have.
+
+The decision still stands, on the reason that always did the real work: these
+values are **not credentials**, so FR-001 is indifferent to which box they sit
+in, and secrets are the conventional home at no cost. What changes is only the
+justification — and it is recorded here rather than quietly corrected, because a
+feature that spent five runs refusing to accept plausible reasoning in place of
+observation should hold its own reasoning to the same standard.
+
+Whether `DEPLOY.md` should be redacted is a separate decision, and the author's:
+a subscription id is not a credential either, and nothing here depends on it
+being secret.
+
 ---
 
 ## No credential ever existed
@@ -69,8 +99,26 @@ $ az ad app credential list --id <client-id> --cert --query 'length(@)' -o tsv
 0
 ```
 
-*After* half pending — it is taken once a deployment has demonstrably succeeded,
-because that is what makes it mean anything (SC-006).
+**After** — 2026-08-10T08:40:54Z, once the deployment had demonstrably
+succeeded:
+
+```console
+$ az ad app credential list --id <client-id> --query 'length(@)' -o tsv
+0
+$ az ad app credential list --id <client-id> --cert --query 'length(@)' -o tsv
+0
+$ az ad app federated-credential list --id <client-id> --query 'length(@)' -o tsv
+1
+```
+
+Zero passwords, zero certificates, one federated credential — which is not a
+secret but a trust condition: it holds no material an attacker could copy, only
+a statement about which runs may present a token.
+
+The ordering is what makes this mean anything. SC-001 passed first, so the
+deployment demonstrably happened while no secret existed. Enumerating an empty
+credential list on an identity that had never deployed would prove nothing at
+all.
 
 ---
 
@@ -493,8 +541,140 @@ not materialise is wrong, not pending.
 
 ## Nothing granted is inert
 
-Pending — T035.
+Two levels, per FR-008.
+
+### The operations
+
+Thirteen in the final role, thirteen accounted for. Zero survive unaccounted.
+
+| # | Operation | Accounted for by |
+| --- | --- | --- |
+| 1 | `Microsoft.Resources/deployments/write` | derivation, activity log |
+| 2 | `Microsoft.Resources/deployments/operationStatuses/read` | derivation, activity log |
+| 3 | `Microsoft.Storage/storageAccounts/write` | derivation, activity log |
+| 4 | `Microsoft.KeyVault/vaults/write` | derivation, activity log |
+| 5 | `Microsoft.OperationalInsights/workspaces/write` | derivation, activity log |
+| 6 | `Microsoft.Insights/components/write` | derivation, activity log |
+| 7 | `Microsoft.MachineLearningServices/workspaces/write` | derivation, activity log |
+| 8 | `Microsoft.Authorization/roleAssignments/write` | derivation, activity log |
+| 9 | `Microsoft.Resources/deployments/validate/action` | run `31303220508` |
+| 10 | `Microsoft.KeyVault/vaults/read` | run `31303489048` |
+| 11 | `Microsoft.OperationalInsights/workspaces/read` | run `31303489048` |
+| 12 | `Microsoft.MachineLearningServices/workspaces/read` | run `31303655969` |
+| 13 | `Microsoft.Resources/deployments/read` | run `31303842799` |
+
+Nothing was deleted, because nothing lacked provenance.
+
+**The two halves are not equally strong, and the table should not hide it.**
+Rows 9–13 are proven necessary: a deployment failed without each of them, and
+the failure named it. Rows 1–8 rest on the activity log — evidence that the
+operation *was invoked*, which is weaker than evidence that the deployment
+*cannot proceed without it*. The clarification recorded in the spec accepted
+that trade deliberately, on the grounds that a withdrawal cycle per operation
+costs a gated run each and demonstrates what discovery already showed. It is a
+reasoned trade, not an equivalence.
+
+### The grant
+
+Withdrawn, exercised, restored, exercised again. Same request both times, from
+the same principal, through the same gate.
+
+**Withdrawn** — run `31370325937`:
+
+```console
+PUT https://management.azure.com/subscriptions/***/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370325937?api-version=2026-06-01
+
+{"error":{"code":"AuthorizationFailed","message":"The client '***' with object id
+'…' does not have authorization to perform action
+'Microsoft.Resources/deployments/write' over scope
+'/subscriptions/***/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370325937'"}}
+HTTP 403
+```
+
+**Restored** — run `31370554784`, byte-identical request:
+
+```console
+{"id":"/subscriptions/***/resourceGroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370554784",
+ "name":"ai300-necessity-31370554784","type":"Microsoft.Resources/deployments",
+ "properties":{"mode":"Incremental","provisioningState":"…
+HTTP 201
+```
+
+403 without the grant, 201 with it, nothing else changed. The grant is what
+authorizes the deployment — not a broader permission sitting behind it, which is
+precisely what feature 002 discovered it had been relying on.
+
+The probe's template declares no resources, so the 201 created a deployment
+record and nothing else. The inventory diff after all of this is still empty.
+
+### Getting this evidence took three attempts, and the failures are the point
+
+The first attempt withdrew the grant and re-ran the deploy workflow. It failed —
+at `azure/login`, with `No subscriptions found`. A principal holding no role
+assignment cannot see the subscription, so the run died on an **empty
+enumeration**.
+
+That would have satisfied SC-007's wording. It should not have satisfied
+anybody: FR-017a exists because an empty result is indistinguishable from an
+empty scope, and accepting one here would have settled the criterion that
+separates this feature from 002 using the exact form of evidence that let 002's
+SC-003 pass. The deployment failing is not in question — what was missing is any
+demonstration that it failed *because permission was refused*.
+
+The second attempt added `allow-no-subscriptions` so login would survive, and
+still passed `subscription-id`; the action then ran `az account set` against a
+subscription the principal could not enumerate, and login died on the local
+account cache. The third dropped `subscription-id` and used `az rest`, which
+resolves the subscription from that same cache before sending anything, and
+failed with `Subscription not found` — the request never left the runner.
+
+Three failures, one shape: **the tooling kept answering a local question before
+the remote one could be asked.** Every convenience layer resolves state on the
+client, and every such resolution is another way to fail without ever reaching
+an authorization decision. The request finally went out as raw HTTP with a token
+and a URL, because that is the only form with no local state to fail on.
+
+Worth keeping, because the same trap took a different disguise in probe P4,
+where `az identity create` read the resource group first and the refusal that
+came back belonged to a boundary nobody was testing.
 
 ## Cost
 
-Pending — T039.
+Two windows compared, because SC-008 asks for **no meter that was not already
+present** — a total alone would not settle that.
+
+| Service | 2026-08-07 → 08-08, before | 2026-08-08 → 08-10, during |
+| --- | --- | --- |
+| Storage | 0.00047445 | 0.00048324 |
+| Key Vault | 0.00003163 | 0.00001054 |
+| Bandwidth | 0.00000009 | 0.00000011 |
+| **Total** | **0.00050617 EUR** | **0.00049389 EUR** |
+
+The same three services appear in both, and both totals round to **0.00 EUR**.
+No meter appeared that was not already there, and the cost during the feature is
+marginally *lower* than before it — these are the pre-existing resources from
+feature 001 ticking over, not anything 003 introduced.
+
+That is the expected result rather than a lucky one. Everything this feature
+created is control-plane metadata or a free-tier feature: an application
+registration, a federated credential, a role definition, a role assignment, an
+empty resource group, GitHub environments and Actions minutes on a public
+repository. The probes were chosen so that even an unexpected *success* would
+create nothing billable (R7), and none of them succeeded.
+
+### A note on how this was measured
+
+`az consumption usage list` returned 12 usage records for the window with
+`pretaxCost: None` and no meter names — on this subscription it reports usage
+without cost. The figures above come from the Cost Management query API instead:
+
+```console
+$ az rest --method post \
+    --url "https://management.azure.com/subscriptions/5900fbc9-…/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+    --body @query.json
+```
+
+Worth recording because quickstart.md names the `az consumption` command, and
+following it would produce a table of nulls that could be misread as zero. Nulls
+are an absence of data; zero is a measurement. The two must not be confused —
+which is the same distinction this feature spent three attempts on elsewhere.
