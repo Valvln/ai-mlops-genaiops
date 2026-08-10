@@ -493,7 +493,102 @@ not materialise is wrong, not pending.
 
 ## Nothing granted is inert
 
-Pending — T035.
+Two levels, per FR-008.
+
+### The operations
+
+Thirteen in the final role, thirteen accounted for. Zero survive unaccounted.
+
+| # | Operation | Accounted for by |
+| --- | --- | --- |
+| 1 | `Microsoft.Resources/deployments/write` | derivation, activity log |
+| 2 | `Microsoft.Resources/deployments/operationStatuses/read` | derivation, activity log |
+| 3 | `Microsoft.Storage/storageAccounts/write` | derivation, activity log |
+| 4 | `Microsoft.KeyVault/vaults/write` | derivation, activity log |
+| 5 | `Microsoft.OperationalInsights/workspaces/write` | derivation, activity log |
+| 6 | `Microsoft.Insights/components/write` | derivation, activity log |
+| 7 | `Microsoft.MachineLearningServices/workspaces/write` | derivation, activity log |
+| 8 | `Microsoft.Authorization/roleAssignments/write` | derivation, activity log |
+| 9 | `Microsoft.Resources/deployments/validate/action` | run `31303220508` |
+| 10 | `Microsoft.KeyVault/vaults/read` | run `31303489048` |
+| 11 | `Microsoft.OperationalInsights/workspaces/read` | run `31303489048` |
+| 12 | `Microsoft.MachineLearningServices/workspaces/read` | run `31303655969` |
+| 13 | `Microsoft.Resources/deployments/read` | run `31303842799` |
+
+Nothing was deleted, because nothing lacked provenance.
+
+**The two halves are not equally strong, and the table should not hide it.**
+Rows 9–13 are proven necessary: a deployment failed without each of them, and
+the failure named it. Rows 1–8 rest on the activity log — evidence that the
+operation *was invoked*, which is weaker than evidence that the deployment
+*cannot proceed without it*. The clarification recorded in the spec accepted
+that trade deliberately, on the grounds that a withdrawal cycle per operation
+costs a gated run each and demonstrates what discovery already showed. It is a
+reasoned trade, not an equivalence.
+
+### The grant
+
+Withdrawn, exercised, restored, exercised again. Same request both times, from
+the same principal, through the same gate.
+
+**Withdrawn** — run `31370325937`:
+
+```console
+PUT https://management.azure.com/subscriptions/***/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370325937?api-version=2026-06-01
+
+{"error":{"code":"AuthorizationFailed","message":"The client '***' with object id
+'…' does not have authorization to perform action
+'Microsoft.Resources/deployments/write' over scope
+'/subscriptions/***/resourcegroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370325937'"}}
+HTTP 403
+```
+
+**Restored** — run `31370554784`, byte-identical request:
+
+```console
+{"id":"/subscriptions/***/resourceGroups/rg-ai300-test01/providers/Microsoft.Resources/deployments/ai300-necessity-31370554784",
+ "name":"ai300-necessity-31370554784","type":"Microsoft.Resources/deployments",
+ "properties":{"mode":"Incremental","provisioningState":"…
+HTTP 201
+```
+
+403 without the grant, 201 with it, nothing else changed. The grant is what
+authorizes the deployment — not a broader permission sitting behind it, which is
+precisely what feature 002 discovered it had been relying on.
+
+The probe's template declares no resources, so the 201 created a deployment
+record and nothing else. The inventory diff after all of this is still empty.
+
+### Getting this evidence took three attempts, and the failures are the point
+
+The first attempt withdrew the grant and re-ran the deploy workflow. It failed —
+at `azure/login`, with `No subscriptions found`. A principal holding no role
+assignment cannot see the subscription, so the run died on an **empty
+enumeration**.
+
+That would have satisfied SC-007's wording. It should not have satisfied
+anybody: FR-017a exists because an empty result is indistinguishable from an
+empty scope, and accepting one here would have settled the criterion that
+separates this feature from 002 using the exact form of evidence that let 002's
+SC-003 pass. The deployment failing is not in question — what was missing is any
+demonstration that it failed *because permission was refused*.
+
+The second attempt added `allow-no-subscriptions` so login would survive, and
+still passed `subscription-id`; the action then ran `az account set` against a
+subscription the principal could not enumerate, and login died on the local
+account cache. The third dropped `subscription-id` and used `az rest`, which
+resolves the subscription from that same cache before sending anything, and
+failed with `Subscription not found` — the request never left the runner.
+
+Three failures, one shape: **the tooling kept answering a local question before
+the remote one could be asked.** Every convenience layer resolves state on the
+client, and every such resolution is another way to fail without ever reaching
+an authorization decision. The request finally went out as raw HTTP with a token
+and a URL, because that is the only form with no local state to fail on.
+
+Worth keeping, because the same trap took a different disguise in probe P4,
+where `az identity create` read the resource group first and the refusal that
+came back belonged to a boundary nobody was testing.
 
 ## Cost
 

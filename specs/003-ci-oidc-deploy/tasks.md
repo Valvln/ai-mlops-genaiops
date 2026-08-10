@@ -185,11 +185,11 @@ is load-bearing. This is the check feature 002 would have failed.
 **Independent Test**: withdraw the grant, run, fail; restore, run, succeed. Then
 walk the role against the provenance table.
 
-- [ ] T033 [US5] Walk every operation in the final `infra/ci-identity.bicep` against [contracts/role-definition.md](contracts/role-definition.md) and delete any whose Provenance cell is empty — the record is binding in the destructive direction, and an unaccounted operation is removed, not argued for (FR-006c, FR-008).
-- [ ] T034 [US5] Redeploy `ci-identity.bicep` after any deletion in T033 and re-run the workflow to confirm the deployment still succeeds. If it now fails, the deleted operation was necessary after all and re-enters the role **with this failure as its provenance** — which is the mechanism working, not a mistake to hide.
-- [ ] T035 [US5] Withdraw the role assignment with `az role assignment delete`, run the workflow, approve the gate, and record the authorization failure and its run id in `results.md` under **Nothing granted is inert**. A run that still succeeds means something other than this grant is authorizing it — the 002 outcome, and a failed criterion.
-- [ ] T036 [US5] Restore the assignment by redeploying `infra/ci-identity.bicep`, run the workflow again, and record the succeeding run id in `results.md` under **Nothing granted is inert**. The final state of the environment must be the working one (spec edge case).
-- [ ] T037 [US5] In `results.md` under **Nothing granted is inert**, tabulate each operation in the final role against the derivation line or verification run that accounts for it, and state the two counts SC-007 compares. Zero operations may survive unaccounted for.
+- [X] T033 [US5] Walk every operation in the final `infra/ci-identity.bicep` against [contracts/role-definition.md](contracts/role-definition.md) and delete any whose Provenance cell is empty — the record is binding in the destructive direction, and an unaccounted operation is removed, not argued for (FR-006c, FR-008).
+- [X] T034 [US5] Redeploy `ci-identity.bicep` after any deletion in T033 and re-run the workflow to confirm the deployment still succeeds. If it now fails, the deleted operation was necessary after all and re-enters the role **with this failure as its provenance** — which is the mechanism working, not a mistake to hide.
+- [X] T035 [US5] Withdraw the role assignment with `az role assignment delete`, run the workflow, approve the gate, and record the authorization failure and its run id in `results.md` under **Nothing granted is inert**. A run that still succeeds means something other than this grant is authorizing it — the 002 outcome, and a failed criterion.
+- [X] T036 [US5] Restore the assignment by redeploying `infra/ci-identity.bicep`, run the workflow again, and record the succeeding run id in `results.md` under **Nothing granted is inert**. The final state of the environment must be the working one (spec edge case).
+- [X] T037 [US5] In `results.md` under **Nothing granted is inert**, tabulate each operation in the final role against the derivation line or verification run that accounts for it, and state the two counts SC-007 compares. Zero operations may survive unaccounted for.
 
 **Checkpoint**: all five stories settled. What remains is writing it down.
 
