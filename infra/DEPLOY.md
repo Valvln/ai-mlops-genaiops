@@ -512,9 +512,24 @@ declare.
 
 **The real cost risk is not here — it is next.** This template declares no
 compute. The moment a compute instance or cluster is added, billing becomes
-hourly and continues whether or not anything is running on it. Constitution
-principle I is explicit: provisioned compute must never be left running
-unattended.
+hourly. Constitution principle I is explicit: provisioned compute must never be
+left running unattended.
+
+The rates, the quota this subscription actually holds, and which compute form
+to use for which exercise are measured in
+[`docs/exam-notes/compute-cost-model.md`](../docs/exam-notes/compute-cost-model.md).
+Three findings from it belong here, because they change how this runbook's
+resource group is read:
+
+- The subscription is **Pay-As-You-Go with the spending limit off**
+  (`quotaId: PayAsYouGo_2014-09-01`), not a free trial. Nothing caps spend
+  automatically; the budget alert emails, it does not stop anything.
+- A **stopped compute instance still costs roughly 25 €/month** — its P10 OS
+  disk and its load balancer both survive the stop. In this project a compute
+  instance should be *deleted*, not stopped.
+- A **managed online endpoint bills for its deployment's instances
+  continuously**, whether or not any request arrives: about 42 €/month for one
+  `Standard_DS1_v2`. The endpoint object itself is free; the deployment is not.
 
 ---
 
