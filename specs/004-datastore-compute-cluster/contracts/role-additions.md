@@ -42,10 +42,10 @@ failure *not* on this list is noticed as interesting rather than shrugged at.
 | 1 | `Microsoft.Storage/storageAccounts/blobServices/containers/write` | high | 31899938698 | ✅ shipped |
 | 2 | `Microsoft.MachineLearningServices/workspaces/datastores/write` | high | 31899938698 | ✅ shipped |
 | 3 | `Microsoft.MachineLearningServices/workspaces/computes/write` | high | 31899938698 | ✅ shipped |
-| 4 | `Microsoft.Storage/storageAccounts/blobServices/containers/read` | medium | — | pending |
-| 5 | `Microsoft.MachineLearningServices/workspaces/datastores/read` | medium | — | pending |
-| 6 | `Microsoft.MachineLearningServices/workspaces/computes/read` | medium | — | pending |
-| 7 | `Microsoft.Storage/storageAccounts/blobServices/read` | low | — | pending |
+| 4 | `Microsoft.Storage/storageAccounts/blobServices/containers/read` | medium | — | **never demanded** |
+| 5 | `Microsoft.MachineLearningServices/workspaces/datastores/read` | medium | 31899938698 att. 2 | ✅ shipped |
+| 6 | `Microsoft.MachineLearningServices/workspaces/computes/read` | medium | 31899938698 att. 2 | ✅ shipped |
+| 7 | `Microsoft.Storage/storageAccounts/blobServices/read` | low | — | **never demanded** |
 
 A row moves to the table below when, and only when, a run id fills its cell.
 
@@ -97,6 +97,62 @@ how the earlier failures happened to surface, mistaken for a law.
 with high confidence and they shipped — but they shipped because run 31899938698
 named them, not because the table guessed right. Rows 4–7 remain pending and
 ship only on the same terms.
+
+### Run 31899938698, attempt 2 — 2026-08-15
+
+The writes cleared validation; two reads then failed during **execution**. The
+error code is `DeploymentFailed` with details, not `InvalidTemplateDeployment` —
+which confirms the split observed in attempt 1: pre-flight validation catches
+writes, reads surface when the deployment actually runs.
+
+| Operation | Named by | Date |
+| --- | --- | --- |
+| `Microsoft.MachineLearningServices/workspaces/computes/read` | run 31899938698 att. 2 | 2026-08-15 |
+| `Microsoft.MachineLearningServices/workspaces/datastores/read` | run 31899938698 att. 2 | 2026-08-15 |
+
+#### The two refusals arrived in different shapes, and that is the finding
+
+```text
+{"code":"AuthorizationFailed",
+ "message":"The client '***' with object id '1a327ac2-…' does not have
+  authorization to perform action
+  'Microsoft.MachineLearningServices/workspaces/computes/read' over scope
+  '…/computes/ai300-cpu-cluster' or the scope is invalid."}
+
+{"code":"UserError",
+ "message":"Identity(object id: 1a327ac2-…) does not have permissions for
+  Microsoft.MachineLearningServices/workspaces/datastores/read actions.",
+ "additionalInfo":[{"type":"ComponentName","info":{"value":"managementfrontend"}},
+                   {"type":"InnerError","info":{"value":{"code":"ForbiddenError"}}}]}
+```
+
+The first is ARM's familiar `AuthorizationFailed`. The second is a **`UserError`
+raised by the Azure ML `managementfrontend`**, with `ForbiddenError` buried in an
+inner error and the operation named in prose rather than in an `action` field.
+
+**Grepping the log for `AuthorizationFailed` finds one and misses the other.**
+That would have added a single operation, sent the workflow round again, and
+produced an identical failure — costing a whole extra gated approval to
+rediscover something already printed in the log that had been read too narrowly.
+
+This is the repository's oldest recurring lesson arriving in a new costume:
+*read the captured error, not the summary.* Here the trap is subtler than
+usual — both errors were captured, in the same response, and the one that could
+be missed is the one that does not use ARM's vocabulary. **A refusal is not
+obliged to announce itself in the words you searched for.** The service sitting
+in front of the resource gets to phrase its own.
+
+### Two predictions were never demanded
+
+Rows 4 and 7 — `blobServices/containers/read` and `blobServices/read` — never
+appeared in any failure, so **they were never added**. The container is created
+and never read back by the deployment; the ML control plane reads its own child
+resources but ARM does not read the storage ones.
+
+They stay in the predicted table marked *never demanded*, rather than being
+quietly deleted. A prediction that did not fire is evidence about how the
+deployment behaves, and erasing it would leave the record looking like the
+forecast was perfect. It was 5 for 7.
 
 ### The object id in the error is the service principal's, not the application's
 

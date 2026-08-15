@@ -92,6 +92,27 @@ var verifiedActions = [
   'Microsoft.Storage/storageAccounts/blobServices/containers/write'
   'Microsoft.MachineLearningServices/workspaces/datastores/write'
   'Microsoft.MachineLearningServices/workspaces/computes/write'
+
+  // Run 31899938698 attempt 2. The writes above got past validation, and these
+  // two then failed during EXECUTION - which is why they arrived a round later
+  // and confirms the split: pre-flight validation catches writes, reads surface
+  // when the deployment actually runs.
+  //
+  // READ BOTH ERRORS, NOT JUST THE ONE THAT SAYS AuthorizationFailed. The two
+  // refusals came back in different shapes:
+  //
+  //   computes/read    code "AuthorizationFailed", from ARM, the familiar form
+  //   datastores/read  code "UserError", from the Azure ML managementfrontend,
+  //                    with "ForbiddenError" only in an inner error and the
+  //                    operation named in prose: "Identity(...) does not have
+  //                    permissions for ... datastores/read actions"
+  //
+  // Grepping the log for 'AuthorizationFailed' finds the first and misses the
+  // second, which costs an entire extra gated run to rediscover. A refusal is
+  // not required to announce itself in ARM's vocabulary - the service in front
+  // of the resource gets to phrase its own.
+  'Microsoft.MachineLearningServices/workspaces/computes/read'
+  'Microsoft.MachineLearningServices/workspaces/datastores/read'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
