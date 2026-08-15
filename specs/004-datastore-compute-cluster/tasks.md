@@ -39,10 +39,10 @@ between phases; the commands are proposed, the author runs them.
 
 **Goal**: Everything that can be written and validated without touching Azure.
 
-- [ ] T001 [P] [LOCAL] Create `mlops/datastore-check/sample.csv` — a few rows of trivial CSV, no real data. This is the known file that makes SC-003 checkable.
-- [ ] T002 [LOCAL] Record `sample.csv`'s identity in `mlops/datastore-check/README.md`: byte count from `wc -c` and sha256 from `shasum -a 256`, both captured **before** any job exists. Discharges the "known" half of SC-003.
-- [ ] T003 [P] [LOCAL] Write `mlops/datastore-check/check_datastore.py` — reads the input path given as an argument, prints byte count, sha256 and row count to stdout. No pandas, no dependencies beyond the standard library: the environment is a curated Azure ML image and the script must not need more than it has.
-- [ ] T004 [LOCAL] Write `mlops/datastore-check/job.yml` — command job referencing `check_datastore.py`, a curated environment (no custom image: the workspace has no container registry, deliberately), the cluster as `compute`, and the sample file as an input addressed **through the datastore URI** so a broken datastore breaks the job. Declare the job identity explicitly per [research.md § R4](./research.md).
+- [X] T001 [P] [LOCAL] Create `mlops/datastore-check/sample.csv` — a few rows of trivial CSV, no real data. This is the known file that makes SC-003 checkable.
+- [X] T002 [LOCAL] Record `sample.csv`'s identity in `mlops/datastore-check/README.md`: byte count from `wc -c` and sha256 from `shasum -a 256`, both captured **before** any job exists. Discharges the "known" half of SC-003.
+- [X] T003 [P] [LOCAL] Write `mlops/datastore-check/check_datastore.py` — reads the input path given as an argument, prints byte count, sha256 and row count to stdout. No pandas, no dependencies beyond the standard library: the environment is a curated Azure ML image and the script must not need more than it has.
+- [X] T004 [LOCAL] Write `mlops/datastore-check/job.yml` — command job referencing `check_datastore.py`, a curated environment (no custom image: the workspace has no container registry, deliberately), the cluster as `compute`, and the sample file as an input addressed **through the datastore URI** so a broken datastore breaks the job. Declare the job identity explicitly per [research.md § R4](./research.md).
 
 **Checkpoint**: The job asset exists and is readable. Nothing has been deployed.
 
@@ -53,12 +53,26 @@ between phases; the commands are proposed, the author runs them.
 **Goal**: The three resources and the grant declared and validated. **Blocks
 everything after it.**
 
-- [ ] T005 [LOCAL] Add the training data container to `infra/main.bicep` per [data-model.md § 1](./data-model.md): type `Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01`, `publicAccess: 'None'`, parented to the existing account's `default` blob service. Discharges FR-001, FR-004.
-- [ ] T006 [LOCAL] Add the datastore to `infra/main.bicep` per [data-model.md § 2](./data-model.md): `@2026-05-01`, `datastoreType: 'AzureBlob'`, `credentials.credentialsType: 'None'`, endpoint from `environment().suffixes.storage`. Comment must say why `None` is a decision and not an omission. Discharges FR-002, FR-003.
-- [ ] T007 [LOCAL] Add the compute cluster to `infra/main.bicep` per [data-model.md § 3](./data-model.md): `@2026-05-01`, `identity.type: 'SystemAssigned'`, `Standard_DS1_v2`, `Dedicated`, `minNodeCount: 0`, `maxNodeCount: 2`, `nodeIdleTimeBeforeScaleDown: 'PT120S'`, `remoteLoginPortPublicAccess: 'Disabled'`. Comments must record the quota arithmetic (2 vCPU against a family limit of 6) and that 120 s equals the default and is declared anyway. Discharges FR-005 through FR-011.
-- [ ] T008 [LOCAL] Add the container read grant to `infra/main.bicep` per [data-model.md § 4](./data-model.md): `Storage Blob Data Reader` (`2a2b9908-6ea1-4ae2-8e65-a410df84e7d1`, verified against the live tenant 2026-08-15), scoped to the **container**, `principalType: 'ServicePrincipal'`, name from `guid()`. The comment must state that this grant may be inert and that T023 is what decides.
-- [ ] T009 [LOCAL] `az bicep build --file infra/main.bicep --stdout > /dev/null` — must exit 0. Report warnings as warnings; the existing `BCP037` suppression on `allowRoleAssignmentOnRG` stays. Constitution principle V gate: **compiles**.
-- [ ] T010 [AZURE] [AUTHOR] `az deployment group what-if -g rg-ai300-test01 -f infra/main.bicep`. Free — `what-if` provisions nothing. Expect exactly **four** `Create` entries and no `Modify` on any existing resource. A `Modify` is a defect: this feature adds, it does not alter. Gate: **deployable**.
+- [X] T005 [LOCAL] Add the training data container to `infra/main.bicep` per [data-model.md § 1](./data-model.md): type `Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01`, `publicAccess: 'None'`, parented to the existing account's `default` blob service. Discharges FR-001, FR-004.
+- [X] T006 [LOCAL] Add the datastore to `infra/main.bicep` per [data-model.md § 2](./data-model.md): `@2026-05-01`, `datastoreType: 'AzureBlob'`, `credentials.credentialsType: 'None'`, endpoint from `environment().suffixes.storage`. Comment must say why `None` is a decision and not an omission. Discharges FR-002, FR-003.
+- [X] T007 [LOCAL] Add the compute cluster to `infra/main.bicep` per [data-model.md § 3](./data-model.md): `@2026-05-01`, `identity.type: 'SystemAssigned'`, `Standard_DS1_v2`, `Dedicated`, `minNodeCount: 0`, `maxNodeCount: 2`, `nodeIdleTimeBeforeScaleDown: 'PT120S'`, `remoteLoginPortPublicAccess: 'Disabled'`. Comments must record the quota arithmetic (2 vCPU against a family limit of 6) and that 120 s equals the default and is declared anyway. Discharges FR-005 through FR-011.
+- [X] T008 [LOCAL] Add the container read grant to `infra/main.bicep` per [data-model.md § 4](./data-model.md): `Storage Blob Data Reader` (`2a2b9908-6ea1-4ae2-8e65-a410df84e7d1`, verified against the live tenant 2026-08-15), scoped to the **container**, `principalType: 'ServicePrincipal'`, name from `guid()`. The comment must state that this grant may be inert and that T023 is what decides.
+- [X] T009 [LOCAL] `az bicep build --file infra/main.bicep --stdout > /dev/null` — must exit 0. Report warnings as warnings; the existing `BCP037` suppression on `allowRoleAssignmentOnRG` stays. Constitution principle V gate: **compiles**.
+- [X] T010 [AZURE] [AUTHOR] `az deployment group what-if -g rg-ai300-test01 -f infra/main.bicep`. Free — `what-if` provisions nothing. Expect exactly **four** `Create` entries. Gate: **deployable**.
+
+  **The acceptance criterion as first written was wrong** and is corrected here rather than quietly satisfied. It read: *"no `Modify` on any existing resource. A `Modify` is a defect."* The run produced three `Modify` entries, and the criterion would have condemned a template that is fine.
+
+  The right criterion is **no *new* `Modify` relative to the template already deployed**, and it is settled by comparison rather than by judgement: run the same `what-if` against `git show HEAD:infra/main.bicep` and diff the change lists.
+
+  **Result, 2026-08-15**: baseline and feature produce an identical set of three `Modify` entries. Feature 004 adds four `Create` and nothing else.
+
+  | `Modify` | What the delta actually says | Verdict |
+  | --- | --- | --- |
+  | Application Insights | `Flow_Type`, `Request_Source` reported as `Create` — provider defaults the template never declared | Pre-existing artefact |
+  | Key Vault role assignment | `principalId` "changing" to the literal string `[reference(...)]` — `what-if` cannot resolve a runtime reference at preview time; `principalType` is marked `NoEffect` by `what-if` itself | Pre-existing artefact |
+  | ML workspace | 16 properties reported as `Delete`, including `properties.creationTime` — properties absent from the template read as removals under `what-if`'s comparison, not under ARM's PATCH semantics | Pre-existing artefact |
+
+  A criterion that fails on a correct template is not a strict criterion, it is a broken one — and "it's probably just `what-if` noise" was a hunch until the baseline comparison made it evidence.
 
 **Checkpoint**: The template compiles and ARM says it would accept it. Nothing
 exists in Azure yet.
