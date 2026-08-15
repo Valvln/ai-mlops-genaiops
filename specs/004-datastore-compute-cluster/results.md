@@ -457,17 +457,52 @@ Read at the end of the session, after the third job scaled down:
 
 | Criterion | Status |
 | --- | --- |
-| SC-001 deployment record succeeded | ✅ by hand; ❌ **not yet via CI** |
+| SC-001 deployment record succeeded | ✅ by hand **and via CI** — `ai300-ci-31899938698 Succeeded` |
 | SC-002 cluster at zero nodes, read from the service | ✅ |
 | SC-003 job output derived from the file's bytes | ✅ twice |
 | SC-004 allocates, then returns to zero unprompted | ✅ |
 | SC-005 size within family and regional quota | ✅ measured on both sides |
-| SC-006 role operations traced to failing runs | ⏸ Phase 4 not started |
-| SC-007 boundary probes still refuse | ⏸ Phase 4 not started |
+| SC-006 role operations traced to failing runs | ✅ 5 added, 5 with run ids, 0 unaccounted |
+| SC-007 boundary probes still refuse | ✅ `The four refusals: success` |
 | SC-008 cost under 1 €, two windows | ⏸ data lags a day |
 | SC-009 both observations recorded with dates | ✅ |
 | SC-010 nothing left running | ✅ |
 
-Six of ten settled, three deferred to the next session for reasons that are
-properties of the data rather than of the work, and one — the CI path — genuinely
-not started because it needs the author at the approval gate.
+**Nine of ten settled.** The one outstanding — SC-008 — is deferred because the
+cost data does not exist yet, not because the work was skipped.
+
+## Phase 4 — the CI authority loop
+
+Run `31899938698`, three attempts, two gate approvals by the author.
+
+| Attempt | Error code | Operations named | Result |
+| --- | --- | --- | --- |
+| 1 | `InvalidTemplateDeployment` | `containers/write`, `datastores/write`, `computes/write` | failed at **validation** |
+| 2 | `DeploymentFailed` | `computes/read`, `datastores/read` | failed at **execution** |
+| 3 | — | — | **success**, record `ai300-ci-31899938698 Succeeded` |
+
+The role went from **13 to 18 operations**, no built-in role, no wildcard, and
+the boundary probes still refuse all four attempts.
+
+Two things were learned that the plan had wrong, both recorded in
+[contracts/role-additions.md](./contracts/role-additions.md):
+
+**Writes and reads fail at different stages.** ARM validates the whole template
+before submitting any of it, so every *write* authorization failure arrives in
+one response; reads surface later, during execution. The forecast of four to
+seven rounds assumed one operation per round, which was 003's experience
+mistaken for a rule.
+
+**Not every refusal says `AuthorizationFailed`.** Attempt 2 returned two
+refusals in different shapes — ARM's familiar `AuthorizationFailed` for
+`computes/read`, and a `UserError` from the Azure ML `managementfrontend` for
+`datastores/read`, with `ForbiddenError` only in an inner error and the
+operation named in prose. Grepping for `AuthorizationFailed` would have found
+one, missed the other, and cost an extra gated approval to rediscover something
+already in the log.
+
+**Prediction scorecard: 5 of 7.** Two predicted reads on the storage container
+were never demanded by any failure and were therefore never added. They stay in
+the table marked *never demanded* rather than deleted — a forecast that did not
+fire is evidence about the deployment's behaviour, and erasing it would make the
+record look prescient.

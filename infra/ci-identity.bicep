@@ -71,6 +71,48 @@ var verifiedActions = [
   // deployed, which is why SC-001 asks for the record; red is not proof that
   // nothing was, which is why this failure had to be read rather than assumed.
   'Microsoft.Resources/deployments/read'
+
+  // --- Feature 004: the template gained three resource types ----------------
+  //
+  // Run 31899938698. All three were named by that ONE failure, and this is the
+  // detail that corrects an assumption carried since 003.
+  //
+  // 003 discovered its operations one per run, so 004 predicted the same
+  // sequence and budgeted four to seven gated runs for it. That is not how it
+  // behaved. The failure came back as InvalidTemplateDeployment - "Deployment
+  // failed with multiple errors" - because ARM validates the whole template
+  // before submitting any of it, and reports every authorization failure it
+  // finds in one response. 003's failures arrived singly because they were
+  // discovered during execution, not during validation.
+  //
+  // The rule is unchanged and still binding: only what a failure NAMES is
+  // added. Here one failure named three, so three enter together, sharing a
+  // provenance. "One per run" was never the rule - it was a symptom of how the
+  // earlier failures happened to surface.
+  'Microsoft.Storage/storageAccounts/blobServices/containers/write'
+  'Microsoft.MachineLearningServices/workspaces/datastores/write'
+  'Microsoft.MachineLearningServices/workspaces/computes/write'
+
+  // Run 31899938698 attempt 2. The writes above got past validation, and these
+  // two then failed during EXECUTION - which is why they arrived a round later
+  // and confirms the split: pre-flight validation catches writes, reads surface
+  // when the deployment actually runs.
+  //
+  // READ BOTH ERRORS, NOT JUST THE ONE THAT SAYS AuthorizationFailed. The two
+  // refusals came back in different shapes:
+  //
+  //   computes/read    code "AuthorizationFailed", from ARM, the familiar form
+  //   datastores/read  code "UserError", from the Azure ML managementfrontend,
+  //                    with "ForbiddenError" only in an inner error and the
+  //                    operation named in prose: "Identity(...) does not have
+  //                    permissions for ... datastores/read actions"
+  //
+  // Grepping the log for 'AuthorizationFailed' finds the first and misses the
+  // second, which costs an entire extra gated run to rediscover. A refusal is
+  // not required to announce itself in ARM's vocabulary - the service in front
+  // of the resource gets to phrase its own.
+  'Microsoft.MachineLearningServices/workspaces/computes/read'
+  'Microsoft.MachineLearningServices/workspaces/datastores/read'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {

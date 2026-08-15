@@ -101,7 +101,7 @@ because the cluster is what US1's job runs on.
 
 ## Phase 4: The CI authority loop
 
-> **⚠️ NOT STARTED — and Phase 5 was run before it, deliberately.**
+> **✅ COMPLETE — 2026-08-15. Phase 5 was run before it, deliberately.**
 >
 > Phase 4 needs a push and a gate approval, both of which are the author's to
 > perform. Phase 5 does not depend on it: the resources exist from the by-hand
@@ -109,8 +109,10 @@ because the cluster is what US1's job runs on.
 > *CI* can deploy them, Phase 5 that they *work*. Running 5 first cost nothing
 > and left 4 unchanged.
 >
-> **Until Phase 4 is done, this feature has not shown that the governed deploy
-> path still functions.** That is the largest outstanding item, not a formality.
+> **Done.** Run 31899938698: two failed attempts naming five operations, then a
+> green third attempt with deployment record `ai300-ci-31899938698 Succeeded`,
+> and the `boundary` job still refusing all four probes. The governed deploy
+> path works with the widened role.
 
 **Goal**: The deployment succeeds *as the deployment identity*, with the role
 widened by exactly what was refused.
@@ -121,7 +123,7 @@ not as one task per predicted operation, because **the predictions are not
 entitlements** — an operation enters the role when a run names it, and a
 prediction that never fires never ships.
 
-- [ ] T016 [AZURE] [CI] [AUTHOR] **Repeat until the workflow is green:**
+- [X] T016 [AZURE] [CI] [AUTHOR] **Repeat until the workflow is green:**
   1. Push the template change to `main`; approve the `azure-deploy` gate. *(The author approves. Never the assistant — FR-012.)*
   2. Read the failure. Confirm it is `AuthorizationFailed` and note the operation it names.
   3. Add **exactly that one operation** to `verifiedActions` in `infra/ci-identity.bicep`, with the run id in the comment.
@@ -139,8 +141,8 @@ prediction that never fires never ships.
 
   Discharges **FR-013**, **FR-014**, **FR-015**, **SC-006**.
 
-- [ ] T017 [AZURE] [CI] Confirm the CI deployment reached Azure: a deployment record created **during that run**, state `Succeeded`. A green workflow is not proof that something deployed, and a red one is not proof that nothing did. Discharges **SC-001**.
-- [ ] T018 [LOCAL] [AUTHOR] Verify the `boundary` job of `infra-deploy.yml` is still green, and that `ci-identity.bicep` holds no built-in role and no wildcard. This is the check that pushes against the boundary instead of reading it. Discharges **SC-007**.
+- [X] T017 [AZURE] [CI] Confirm the CI deployment reached Azure: a deployment record created **during that run**, state `Succeeded`. A green workflow is not proof that something deployed, and a red one is not proof that nothing did. Discharges **SC-001**.
+- [X] T018 [LOCAL] [AUTHOR] Verify the `boundary` job of `infra-deploy.yml` is still green, and that `ci-identity.bicep` holds no built-in role and no wildcard. This is the check that pushes against the boundary instead of reading it. Discharges **SC-007**.
 
 **Checkpoint**: CI can deploy the template, and its authority grew by exactly
 what was refused.
@@ -193,7 +195,7 @@ the job existed.
 - [X] T029 [AZURE] [AUTHOR] **SC-010** — confirm nothing is left running: `az ml compute list-nodes` empty, `az ml online-endpoint list` empty, `az ml batch-endpoint list` empty. **The feature does not close while a node is allocated.** Discharges **FR-021**.
 - [X] T030 [LOCAL] Update `infra/DEPLOY.md`: the new resources and their observed values, the cluster's shutdown procedure, and the CI role additions with their run ids. Its established role is to be revised with what was observed.
 - [X] T031 [LOCAL] Draft candidate `README.md` text in the author's first person, describing what was built and why the size and the identity were chosen as they were. **The author rewrites and commits it** — constitution principle IV.
-- [ ] T032 [LOCAL] Close [contracts/role-additions.md](./contracts/role-additions.md): every operation added has a run id, the counts match, the `boundary` job is green.
+- [X] T032 [LOCAL] Close [contracts/role-additions.md](./contracts/role-additions.md): every operation added has a run id, the counts match, the `boundary` job is green.
 
 ---
 
