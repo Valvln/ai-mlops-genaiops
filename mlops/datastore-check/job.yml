@@ -1,0 +1,47 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+# The verification job for feature 004. It proves that a node of the compute
+# cluster can read a known file through a credential-less datastore, and it
+# proves it with a checksum rather than with an exit code.
+#
+# Submit with:
+#   az ml job create -g rg-ai300-test01 -w <workspace> -f mlops/datastore-check/job.yml --stream
+
+display_name: datastore-check
+description: >-
+  Reads a known file through the training-data datastore and prints its byte
+  count and sha256. Trains nothing. Exists to settle SC-003 of feature 004.
+experiment_name: ai300-datastore-check
+
+code: .
+command: python check_datastore.py --input ${{inputs.sample}}
+
+# Curated environment from the azureml registry, pinned to an observed version
+# rather than to `latest`. Version 52 was read from the registry on 2026-08-15.
+# A custom image is not an option and deliberately so: it would need a container
+# registry, and main.bicep omits containerRegistry precisely so that none is
+# provisioned.
+environment: azureml://registries/azureml/environments/sklearn-1.5/versions/52
+
+inputs:
+  sample:
+    # uri_file, not uri_folder: the script expects one named file, and the
+    # narrower type makes a wrong path fail at mount time rather than inside
+    # the script.
+    type: uri_file
+    # Addressed through the DATASTORE, not through a storage URL. This is what
+    # makes the job a test of the datastore: point it at https://<account>...
+    # instead and it would prove nothing about the datastore at all.
+    path: azureml://datastores/ai300_training_data/paths/sample.csv
+    mode: ro_mount
+
+compute: azureml:ai300-cpu-cluster
+
+# Declared, not defaulted. research.md R4 established that there are three
+# candidate identities for a datastore read - the submitting user, the
+# workspace, and the compute cluster - and that leaving this blank means not
+# knowing which one performed it. `managed` selects the cluster's own
+# system-assigned identity, which is the one main.bicep grants Storage Blob
+# Data Reader on the container.
+identity:
+  type: managed

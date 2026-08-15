@@ -1,0 +1,6 @@
+id,region,feature_a,feature_b,label
+1,northeurope,0.41,12.7,0
+2,northeurope,0.88,3.2,1
+3,northeurope,0.15,44.9,0
+4,northeurope,0.62,8.1,1
+5,northeurope,0.30,21.5,0
