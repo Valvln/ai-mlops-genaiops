@@ -161,6 +161,18 @@ Then an interesting part: four commands that must be refused run inside the work
 
 The same trap came back a third time, when I wanted to prove the grant is actually doing something. Withdrawing it and redeploying does fail — but it fails with "no subscriptions found". It took three attempts to get a real denial: every `az` command resolves something locally before asking Azure, and every local resolution is a failure. In the end it came out as an HTTP request: 403 without the grant, 201 with it, same request. That is the check 002 would not have passed.
 
+### Somewhere to read from, something to run on
+
+The workspace existed but could do nothing — no data, no compute. This feature gave it both: a blob container, a datastore that authenticates as the workspace instead of holding a key, a cluster that scales to zero when idle. All declared in the template, all shipped through CI and the approval gate.
+
+Widening the role again corrected an assumption I had carried since the earlier work: that failures arrive one at a time. This run named three missing permissions at once — because validation checks the whole template before submitting any of it, while my earlier failures had only ever surfaced singly, during execution. "One per run" was never a rule. It was a symptom I had mistaken for one.
+
+Two refusals then arrived in different costumes: AuthorizationFailed from ARM, UserError from Azure ML's own front end — same meaning, different name, and only one looks like a permissions problem on sight.
+
+The measurements corrected me further. A cluster at rest consumes no vCPU quota at all; quota counts what is running, not what the template allows — quota and cost, it turns out, are two separate ledgers, and I had been reading one to predict the other. I also went looking for the networking resources the design notes promised. They were never there. The grant I had justified by their existence was withdrawn, and nothing broke.
+
+One criterion I could not close — my error, not the deployment's: I asked for cost data the same day, and cost data arrives roughly a day late. A criterion that cannot be checked when the work ends will quietly go unchecked. I scheduled it instead, and wrote the question down.
+
 ### `.github/workflows/` — validation and deployment
 
 **`bicep-validate.yml`** — recompiles every template under `infra/` on every push
