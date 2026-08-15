@@ -5,8 +5,11 @@ Operationalizing Machine Learning and Generative AI Solutions**. I use it to
 build the exam topics as working artifacts instead of reading about them, so
 everything here is something I can run, validate, and explain.
 
-I develop it on an Azure free trial, which shapes most of my design decisions:
-cheapest viable SKU, nothing left running, and as much validated locally as
+I develop it on a Pay-As-You-Go subscription with the spending limit off. I
+spent the first three features believing it was a free trial, and checking
+turned out to matter: no credit absorbs these figures, and nothing stops a bill
+automatically. That is what my design decisions are actually protecting against
+— cheapest viable SKU, nothing left running, and as much validated locally as
 possible before anything touches Azure.
 
 ## How I work
