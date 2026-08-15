@@ -692,9 +692,12 @@ only by GitHub.
 This is the designed behaviour, not a defect, and it is the cost of a role
 narrow enough to be worth having.
 
-The CI role permits thirteen operations and no more. It carries no wildcard, no
-`delete`, and nothing for resource types the template does not declare. Add a
-resource type and the deployment stops with:
+The CI role permits exactly the operations enumerated in
+`infra/ci-identity.bicep` — each one recorded beside the failing run that
+demanded it — and no more. The count is deliberately not repeated here: it grows
+with every feature, and a number duplicated into prose is a number that rots.
+The role carries no wildcard, no `delete`, and nothing for resource types the
+template does not declare. Add a resource type and the deployment stops with:
 
 ```text
 AuthorizationFailed … does not have authorization to perform action
