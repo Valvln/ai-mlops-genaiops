@@ -9,7 +9,10 @@ was not present when it was written.
 
 ### I. Cost Discipline (NON-NEGOTIABLE)
 
-This repository is developed on an Azure free trial. Cost is a hard design
+This repository is developed on a **Pay-As-You-Go** subscription whose spending
+limit is **Off** (verified 2026-08-11 against ARM; see
+`docs/exam-notes/compute-cost-model.md` § 1). Nothing caps spend automatically —
+a budget alert emails, it does not stop anything. Cost is a hard design
 constraint, not an afterthought.
 
 - Every exercise MUST state up front whether it runs **locally (free)** or
@@ -107,4 +110,4 @@ principle and a convenience conflict, the principle wins.
 - Any proposed change that violates a principle MUST be surfaced as a violation
   before implementation, not silently worked around.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-06
+**Version**: 1.0.1 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-15

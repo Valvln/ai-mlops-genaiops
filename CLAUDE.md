@@ -6,8 +6,9 @@ Guidance for Claude Code when working in this repository.
 
 Hands-on preparation for **Microsoft AI-300 — Operationalizing Machine Learning
 and Generative AI Solutions**. Exam topics are built as working, verifiable
-artifacts rather than read about. Everything runs on an Azure free trial, so
-cost is a design constraint rather than an afterthought.
+artifacts rather than read about. Everything runs on a **Pay-As-You-Go**
+subscription with the spending limit **Off**, so cost is a design constraint
+rather than an afterthought.
 
 The author is preparing for the exam. Explaining *why* a choice was made is part
 of the deliverable, not padding — a change that works but teaches nothing has
@@ -90,9 +91,12 @@ only when none fits.
 
 `infra/DEPLOY.md` is the deployment runbook, written before the first
 deployment and revised with observed values afterwards. Read it before running
-anything against a subscription. Two things it records that are easy to walk
+anything against a subscription. The things it records that are easiest to walk
 into:
 
+- **Nothing caps spend on this subscription.** It is Pay-As-You-Go with
+  `spendingLimit: Off`. The budget alert notifies; it does not stop a
+  deployment. Measured rates are in `docs/exam-notes/compute-cost-model.md`.
 - **The Key Vault name is locked for 90 days after any teardown.** Purge
   protection is enabled and irreversible, and resource names derive from
   `uniqueString(resourceGroup().id)` — so recreating a resource group with the
