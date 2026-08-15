@@ -71,6 +71,27 @@ var verifiedActions = [
   // deployed, which is why SC-001 asks for the record; red is not proof that
   // nothing was, which is why this failure had to be read rather than assumed.
   'Microsoft.Resources/deployments/read'
+
+  // --- Feature 004: the template gained three resource types ----------------
+  //
+  // Run 31899938698. All three were named by that ONE failure, and this is the
+  // detail that corrects an assumption carried since 003.
+  //
+  // 003 discovered its operations one per run, so 004 predicted the same
+  // sequence and budgeted four to seven gated runs for it. That is not how it
+  // behaved. The failure came back as InvalidTemplateDeployment - "Deployment
+  // failed with multiple errors" - because ARM validates the whole template
+  // before submitting any of it, and reports every authorization failure it
+  // finds in one response. 003's failures arrived singly because they were
+  // discovered during execution, not during validation.
+  //
+  // The rule is unchanged and still binding: only what a failure NAMES is
+  // added. Here one failure named three, so three enter together, sharing a
+  // provenance. "One per run" was never the rule - it was a symptom of how the
+  // earlier failures happened to surface.
+  'Microsoft.Storage/storageAccounts/blobServices/containers/write'
+  'Microsoft.MachineLearningServices/workspaces/datastores/write'
+  'Microsoft.MachineLearningServices/workspaces/computes/write'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {

@@ -39,9 +39,9 @@ failure *not* on this list is noticed as interesting rather than shrugged at.
 
 | # | Predicted operation | Confidence | Run id | Ships? |
 | --- | --- | --- | --- | --- |
-| 1 | `Microsoft.Storage/storageAccounts/blobServices/containers/write` | high | — | pending |
-| 2 | `Microsoft.MachineLearningServices/workspaces/datastores/write` | high | — | pending |
-| 3 | `Microsoft.MachineLearningServices/workspaces/computes/write` | high | — | pending |
+| 1 | `Microsoft.Storage/storageAccounts/blobServices/containers/write` | high | 31899938698 | ✅ shipped |
+| 2 | `Microsoft.MachineLearningServices/workspaces/datastores/write` | high | 31899938698 | ✅ shipped |
+| 3 | `Microsoft.MachineLearningServices/workspaces/computes/write` | high | 31899938698 | ✅ shipped |
 | 4 | `Microsoft.Storage/storageAccounts/blobServices/containers/read` | medium | — | pending |
 | 5 | `Microsoft.MachineLearningServices/workspaces/datastores/read` | medium | — | pending |
 | 6 | `Microsoft.MachineLearningServices/workspaces/computes/read` | medium | — | pending |
@@ -51,11 +51,62 @@ A row moves to the table below when, and only when, a run id fills its cell.
 
 ## Confirmed by a failing run — the operations that actually shipped
 
-*Empty at the time of writing. This is the deliverable of the deployment phase.*
+### Run 31899938698 — 2026-08-15
 
-| Operation | Run id | The error, quoted | Date |
-| --- | --- | --- | --- |
-| | | | |
+The first deployment after the merge, as predicted, and the first time the
+narrow role met a template declaring types it had never seen.
+
+| Operation | Named by | Date |
+| --- | --- | --- |
+| `Microsoft.Storage/storageAccounts/blobServices/containers/write` | run 31899938698 | 2026-08-15 |
+| `Microsoft.MachineLearningServices/workspaces/datastores/write` | run 31899938698 | 2026-08-15 |
+| `Microsoft.MachineLearningServices/workspaces/computes/write` | run 31899938698 | 2026-08-15 |
+
+The error, quoted, with the subscription and client id masked by the runner:
+
+```text
+ERROR: {"code": "InvalidTemplateDeployment", "message": "Deployment failed with
+multiple errors: 'Authorization failed for template resource
+'ai300st2mgou37pfmjou/default/training-data' of type
+'Microsoft.Storage/storageAccounts/blobServices/containers'. The client '***'
+with object id '1a327ac2-ea18-43d0-9948-0488c72d5eea' does not have permission
+to perform action 'Microsoft.Storage/storageAccounts/blobServices/containers/write'
+at scope '.../containers/training-data'.
+:Authorization failed for template resource 'ai300ml2mgou37pfmjou/ai300_training_data'
+of type 'Microsoft.MachineLearningServices/workspaces/datastores'. ... does not have
+permission to perform action 'Microsoft.MachineLearningServices/workspaces/datastores/write' ...
+:Authorization failed for template resource 'ai300ml2mgou37pfmjou/ai300-cpu-cluster'
+of type 'Microsoft.MachineLearningServices/workspaces/computes'. ... does not have
+permission to perform action 'Microsoft.MachineLearningServices/workspaces/computes/write' ...'"}
+```
+
+**Three operations from one failure, which corrects an assumption.** Feature 003
+discovered its operations one per run, and this feature's research predicted the
+same rhythm — four to seven gated runs, one operation each. Wrong. The response
+code is `InvalidTemplateDeployment`, not `AuthorizationFailed`: ARM validated the
+**whole template** before submitting any of it and reported every authorization
+failure it found at once. 003's failures arrived singly because they surfaced
+during execution rather than during validation.
+
+The binding rule is untouched — **only what a failure names is added** — and it
+was satisfied: one failure named three operations, so three were added, sharing
+one provenance. "One operation per run" was never the rule; it was a symptom of
+how the earlier failures happened to surface, mistaken for a law.
+
+**A confirmed prediction is still not an entitlement.** Rows 1–3 were predicted
+with high confidence and they shipped — but they shipped because run 31899938698
+named them, not because the table guessed right. Rows 4–7 remain pending and
+ship only on the same terms.
+
+### The object id in the error is the service principal's, not the application's
+
+The error names object id `1a327ac2-ea18-43d0-9948-0488c72d5eea`. The role
+assignment's `principalName` is `39fecb6c-26e3-42f3-bef6-0483f7daf6d5`. These are
+not in conflict: the first is the **service principal object id**, the second the
+**application (client) id**. `DEPLOY.md` § 5 warns that assigning a role against
+the client id points at a principal that does not exist — this is the same
+distinction seen from the other side, and confirms the failing principal is the
+one holding the role.
 
 ## Predicted **not** to fail
 
