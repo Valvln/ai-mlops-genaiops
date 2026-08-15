@@ -482,13 +482,54 @@ in seconds rather than diagnosed from scratch.
 
 | When | What fails | What to do |
 | --- | --- | --- |
-| The workspace needs authority over the resource group as a whole | `allowRoleAssignmentOnRG: false` blocks it | set the property back to `true` in `main.bicep` and redeploy |
+| ~~The workspace needs authority over the resource group as a whole~~ | **Did not happen. Tested 2026-08-15** — see below | — |
 | A job or datastore operation is refused on the storage account | the switch from account keys to identity | check the identity's blob access first; the fallback is `systemDatastoresAuthMode: 'accesskey'` |
 | A credential-carrying datastore or connection is created | writing a secret to the vault | the platform's vault administration grant already covers it; only relevant if that grant is ever narrowed |
 
 The three permission-restore commands above are no longer expected to be needed:
 the platform maintains those grants itself. They are kept for the case where it
 stops doing so.
+
+#### The resource-group grant was not needed — settled 2026-08-15
+
+This section predicted that withholding resource-group-scoped authority would
+eventually block the workspace from provisioning compute. **Feature 004 created
+the first compute target and nothing was refused.**
+
+```text
+az deployment group create -g rg-ai300-test01 -f infra/main.bicep
+  → Succeeded (ai300-004-1786811820), with allowRoleAssignmentOnRG still false
+```
+
+The cluster was created, allocated nodes for three jobs, and scaled back down,
+all without the grant that feature 002 removed. The open question the tracker
+has carried since then is closed: **the withdrawn authority is not required for
+an AmlCompute cluster on this workspace.**
+
+The predicted *mechanism* was also wrong, and that part is worth keeping. The
+expectation — taken from Microsoft's compute cluster documentation — was that
+creating a cluster would create three objects in this resource group:
+`<GUID>-azurebatch-cloudservicenetworksecuritygroup`,
+`<GUID>-azurebatch-cloudservicepublicip`, and
+`<GUID>-azurebatch-cloudserviceloadbalancer`.
+
+**None of them exists**, at zero nodes or with a node running:
+
+```bash
+az resource list -g rg-ai300-test01 \
+  --query "[?contains(name,'azurebatch') || contains(type,'Network')]" -o table
+# (empty)
+```
+
+The likely reason — **hypothesis, not a result** — is that those objects belong
+to VNet-injected clusters, where the networking sits in the customer's resource
+group. This workspace has `managedNetwork.isolationMode: Disabled` and no
+virtual network, so the cluster's networking never lands here. If a future
+feature enables network isolation, expect this to change, and expect the
+resource-group authority question to reopen with it.
+
+Do **not** read this as "compute never needs resource-group authority". It is
+one cluster, on one workspace, with managed networking disabled.
 
 ---
 
@@ -510,10 +551,43 @@ after 24–48 hours, filtered to `rg-ai300-test01`. A number that is not
 approximately zero means something was provisioned that this template did not
 declare.
 
-**The real cost risk is not here — it is next.** This template declares no
-compute. The moment a compute instance or cluster is added, billing becomes
-hourly. Constitution principle I is explicit: provisioned compute must never be
-left running unattended.
+**The template now declares compute, and billing can become hourly.** Feature
+004 added a blob container, a credential-less datastore, and an **AmlCompute
+cluster** (`ai300-cpu-cluster`, `Standard_DS1_v2`, dedicated, min 0 / max 2,
+120 s idle before scale-down). Constitution principle I is explicit: provisioned
+compute must never be left running unattended.
+
+What that costs, measured on 2026-08-15:
+
+| State | Charge |
+| --- | --- |
+| Cluster deployed, zero nodes | **nothing** — and no vCPU quota held either |
+| One node allocated | 0.05774 €/node-hour, plus the 120 s idle tail |
+| Two nodes for a full day (the worst case the max bounds) | ~2.77 € |
+
+**Verify zero nodes by reading the service, not the template.** `min_instances:
+0` echoed back by `az ml compute show` is the request, not the result — and that
+command returned an *empty* `node_state_counts`, which is not a zero. The
+positive reading comes from ARM:
+
+```bash
+az rest --method get --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/rg-ai300-test01/providers/Microsoft.MachineLearningServices/workspaces/<ws>/computes/ai300-cpu-cluster?api-version=2026-05-01" \
+  --query "properties.properties.{alloc:allocationState, current:currentNodeCount, states:nodeStateCounts}"
+```
+
+All six node-state buckets at `0` with `allocationState: Steady` is the check.
+Observed scale-down after a job: ~75 seconds to `Steady` at zero, unprompted.
+
+**Reading job logs needs the account key on this workspace.** `az ml job
+download` fails with `AuthorizationPermissionMismatch`, because job logs live in
+blob storage and the author's `Owner` role carries no data-plane access. Read
+them directly instead:
+
+```bash
+az storage blob download --account-name <storage> --container-name azureml \
+  --name "ExperimentRun/dcid.<job-name>/user_logs/std_log.txt" \
+  --file ./std_log.txt --auth-mode key
+```
 
 The rates, the quota this subscription actually holds, and which compute form
 to use for which exercise are measured in
