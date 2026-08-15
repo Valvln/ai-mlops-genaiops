@@ -302,19 +302,26 @@ var storageBlobDataReaderRoleId = subscriptionResourceId(
   '2a2b9908-6ea1-4ae2-8e65-a410df84e7d1'
 )
 
-// THIS GRANT MAY BE INERT, AND THAT IS TESTED RATHER THAN ASSUMED.
+// LOAD-BEARING. Verified by withdrawal on 2026-08-15, not assumed.
 //
-// The workspace's own identity already holds Storage Blob Data Contributor at
-// STORAGE ACCOUNT scope, maintained by the platform, and that covers this
-// container too. So if the job's read is performed by the workspace identity
-// rather than by the cluster's, this assignment authorises nothing at all - and
-// this template already carries one assignment in exactly that condition (the
-// Key Vault one above, kept and documented as inert).
+// Unlike the Key Vault assignment above - which is kept and documented as inert
+// because the platform grants the same access anyway - this one does real work,
+// and it was tested rather than trusted:
 //
-// Shipping a second one without knowing which it is would repeat feature 002's
-// mistake at a lower level. The test is in the feature's task list: remove this
-// grant, re-run the verification job, and see whether it fails. Whatever the
-// answer, this comment gets replaced by it.
+//   Grant removed  -> job stoic_zoo_rrf7805s9q FAILED at the data mount with
+//                     ScriptExecution.StreamAccess.Authentication, and the
+//                     underlying request logged HTTP 403 against
+//                     .../training-data/sample.csv (server request id
+//                     df3c1698-401e-0004-7bd8-2cfcaa000000).
+//   Grant restored -> the job succeeds again.
+//
+// The result was not the expected one, and the reason is worth keeping. The
+// WORKSPACE identity holds Storage Blob Data Contributor at storage ACCOUNT
+// scope, which covers this container, so the grant below looked likely to be
+// redundant. It is not - because the job runs as the COMPUTE cluster's identity
+// (job.yml declares `identity: managed`), and a grant held by one principal does
+// not authorise a read performed by another. The grant that matters is the one
+// held by the identity the job actually runs as.
 //
 // Scoped to the container rather than the storage account: the narrowest scope
 // that works, and it keeps the cluster out of the workspace's own containers.
