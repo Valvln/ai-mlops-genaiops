@@ -433,13 +433,64 @@ Listed so that none of it is later remembered as fact.
 
 | Claim | Status | How to settle it |
 | --- | --- | --- |
-| A cluster resting at `min_nodes: 0` incurs no load balancer charge | **unverified** — the docs describe load balancer billing for clusters without saying what happens at zero nodes | Create the Week 2 cluster, leave it at 0 nodes for 48 h, read Cost Management |
+| A cluster resting at `min_nodes: 0` incurs no load balancer charge | **still unverified as a charge, but narrowed** — see § 7.1 | Read Cost Management for a full day at rest, 2026-08-16 or later |
 | The load balancer figure in EUR | **unconverted** — Microsoft states ≈ 0.33 USD/day; no matching meter was found in the retail API for `northeurope` | Read the actual meter in Cost Management once a compute instance exists |
 | Whether trial credit remains on this subscription | **unverifiable from these APIs** | Portal → Cost Management → Credits |
-| Whether a budget alert exists | **unconfirmed** — `az consumption budget list` returns `[]`, which is not proof of absence | Portal → Cost Management → Budgets |
+| ~~Whether a budget alert exists~~ | ✅ **confirmed 2026-08-15** by the author, in the portal, before the first hourly resource was created. The CLI still cannot see it; that remains a limitation of `az consumption budget list`, not evidence about the budget | — |
 | Node-hours are billed from allocation (image pull, provisioning) rather than from script start | **unverified** | Run one short job, compare job duration against the billed node time |
 | Managed online endpoint quota | **not exposed** — `az ml compute list-usage` shows no online-endpoint bucket, so the allocatable instance count for a deployment is unknown until one is attempted | Attempt the Week 2 deployment; an `OutOfQuota` error names the real limit |
 | The two non-zero Azure ML surcharge meters (GPU, PB) apply to v2 workloads | **unverified**, and out of scope — no GPU exercise is planned | — |
+
+### 7.1 What the first real cluster settled — 2026-08-15
+
+Feature 004 deployed `ai300-cpu-cluster` (`Standard_DS1_v2`, dedicated, min 0 /
+max 2) and ran three jobs on it. Four things in this note can now be corrected
+or narrowed, and one correction is to § 2 rather than to this section.
+
+**Quota is consumed by allocated nodes, not by the declared maximum.** § 2 said
+a stopped compute instance keeps its quota, and quoted the documentation phrase
+*"unprovisioned nodes contribute to your quota usage"*. Read against a cluster,
+that phrase misleads. Measured on both sides:
+
+| Bucket | cluster idle | 1 node allocated | limit |
+| --- | --- | --- | --- |
+| Total Clusters | 1 | 1 | 200 |
+| Total Cluster Dedicated Regional vCPUs | **0** | **1** | 20 |
+| Standard DSv2 Family Cluster Dedicated vCPUs | **0** | **1** | 6 |
+
+So a cluster at rest holds **one entry in the cluster-count quota and no vCPU
+quota at all**. The compute-instance statement in § 2 is unaffected — it comes
+from a different documentation page and concerns a different object — but do not
+generalise it to clusters.
+
+**No load balancer resource exists in the resource group.** § 4.1 flagged as
+unknown whether a cluster at zero nodes bills one. The physical prerequisite was
+checked first: `az resource list` shows **no** `Microsoft.Network/*` resource
+and **no** `*-azurebatch-*` object in `rg-ai300-test01`, either at zero nodes or
+while a node was running.
+
+The documented `<GUID>-azurebatch-cloudserviceloadbalancer` objects most likely
+belong to **VNet-injected** clusters, where the networking lands in the
+customer's resource group. This workspace runs with `isolationMode: Disabled`
+and no virtual network, so that networking is managed on Microsoft's side.
+**That explanation is a hypothesis.** The observation — no such resource here —
+is not.
+
+A charge cannot be ruled out from resource absence alone, because existence and
+billing are different ledgers. But it makes "no load-balancer charge for this
+cluster" the likely answer, and the cost reading over a full day is what decides
+it. **Still open.**
+
+**Node-hours: not settled, and now cheap to settle.** Three job runs exist with
+known submit and completion times; comparing them against the billed node time
+answers the § 7 row about whether billing starts at allocation or at script
+start. Worth doing when the cost data lands.
+
+**Cost data lags.** The two-window comparison this note prescribes cannot be run
+on the same day as the spend. Cost Management had no 2026-08-15 figures hours
+after the jobs completed. Any verification of a day's spend is a next-day
+activity — which is a scheduling fact worth having written down, since feature
+004's task list got it wrong.
 
 ---
 
