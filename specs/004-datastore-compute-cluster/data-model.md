@@ -77,9 +77,16 @@ does not arise, and every `az ml` command in the runbook and in `quickstart.md`
 can name it literally. The name must be 3–24 characters, start with a letter,
 and be unique within the region for the workspace.
 
-**Quota is held, cost is not.** The cluster reserves 2 vCPU of DSv2 family quota
-for as long as it exists, at zero nodes and zero cost. Only deleting it returns
-the quota (R3). Two ledgers, and the exam asks about both.
+**Quota is held, cost is not.** ~~The cluster reserves 2 vCPU of DSv2 family
+quota for as long as it exists, at zero nodes and zero cost.~~
+
+**Measured 2026-08-15, and it does not:** with the cluster deployed and idle,
+the DSv2 family bucket and the regional dedicated bucket both read `used = 0`.
+The only bucket that moves is `Total Clusters`, from 0 to 1. See the correction
+box in [research.md § R3](./research.md) — the original sentence was inferred
+from documentation rather than read from the subscription, which is the mistake
+this project keeps rediscovering. Whether vCPU quota tracks allocated nodes is
+confirmed when the verification job holds one.
 
 ---
 

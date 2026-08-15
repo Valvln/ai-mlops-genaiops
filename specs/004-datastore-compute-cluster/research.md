@@ -94,6 +94,34 @@ quota."* So 2 vCPU of the 6 available in the DSv2 family are held for as long as
 the cluster exists, at zero nodes and zero cost. Quota and cost are different
 ledgers; this is the sentence that separates them.
 
+> ### ⚠️ CORRECTED BY MEASUREMENT, 2026-08-15
+>
+> **The paragraph above is wrong, and it was wrong because it was reasoned from
+> a documentation sentence instead of measured.** With the cluster deployed and
+> resting at zero nodes, `az ml compute list-usage` reports:
+>
+> | Bucket | used | limit |
+> | --- | --- | --- |
+> | Total Clusters | **1** | 200 |
+> | Total Cluster Dedicated Regional vCPUs | **0** | 20 |
+> | Standard DSv2 Family Cluster Dedicated vCPUs | **0** | 6 |
+>
+> **No vCPU quota is held at zero nodes.** Only the cluster-count bucket moves.
+> The 2 vCPU figure was an inference from "unprovisioned nodes contribute to
+> your quota usage", and that sentence evidently means something narrower than
+> "max_nodes is reserved" — most plausibly, nodes that are targeted but not yet
+> provisioned during a scale-up.
+>
+> Two caveats kept rather than smoothed over. The reading was taken about a
+> minute after creation, and quota accounting may be eventually consistent; and
+> a single reading at one moment is not a behaviour. The re-read while the
+> verification job holds a node (task T021) is what completes the picture — if
+> the DSv2 bucket moves to 1 then, quota tracks **allocated** nodes, and the
+> corrected rule is that a cluster at rest costs neither money nor vCPU quota.
+>
+> This is the second claim in this session to survive a documentation reading
+> and fail a measurement. The pattern is the point.
+
 ## R4 — Which identity actually reads the data
 
 This is the question the plan was asked to settle rather than assume, and the

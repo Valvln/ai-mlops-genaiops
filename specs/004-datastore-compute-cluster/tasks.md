@@ -89,17 +89,28 @@ because the cluster is what US1's job runs on.
 
 **Independent test**: Read the deployed cluster's node counts from the service.
 
-- [ ] T011 [AZURE] [AUTHOR] Deploy `infra/main.bicep` by hand: `az deployment group create -g rg-ai300-test01 -f infra/main.bicep`. **Free** — no node is allocated by creating a cluster. Separates template defects from authorisation defects before CI is involved ([research.md § R6](./research.md)); pre-authorises nothing, since ARM reissues the same writes on the CI deployment.
-- [ ] T012 [AZURE] [AUTHOR] Confirm the deployment record: `az deployment group list -g rg-ai300-test01 -o table`. A green command is not the record. Discharges the local half of **SC-001**.
-- [ ] T013 [AZURE] [AUTHOR] **Observation A — the resource-group grant.** `az resource list -g rg-ai300-test01 --query "[?contains(name,'azurebatch')]" -o table`. Record which of the three `*-azurebatch-*` objects exist (NSG, public IP, load balancer), or, if cluster creation failed, the authorisation error **verbatim**. Both outcomes are findings. Available now and only now. Discharges **FR-016** (first half), **SC-009**.
-- [ ] T014 [AZURE] [AUTHOR] **SC-002** — `az ml compute show` and `az ml compute list-nodes` on the cluster. Passes when every node count is 0 and `provisioning_state` is `Succeeded`. **Read the service, not the template**: `min_instances: 0` in the output is the request echoed back and does not satisfy this. Discharges **SC-002**, **FR-017**.
-- [ ] T015 [AZURE] [AUTHOR] Confirm the size against live quota: `az ml compute list-usage -g rg-ai300-test01 -w <ws> -o table`. Record the DSv2 family limit and what the cluster now holds. Discharges **SC-005** on the declared side; T019 confirms it on the allocated side.
+- [X] T011 [AZURE] [AUTHOR] Deploy `infra/main.bicep` by hand: `az deployment group create -g rg-ai300-test01 -f infra/main.bicep`. **Free** — no node is allocated by creating a cluster. Separates template defects from authorisation defects before CI is involved ([research.md § R6](./research.md)); pre-authorises nothing, since ARM reissues the same writes on the CI deployment.
+- [X] T012 [AZURE] [AUTHOR] Confirm the deployment record: `az deployment group list -g rg-ai300-test01 -o table`. A green command is not the record. Discharges the local half of **SC-001**.
+- [X] T013 [AZURE] [AUTHOR] **Observation A — the resource-group grant.** `az resource list -g rg-ai300-test01 --query "[?contains(name,'azurebatch')]" -o table`. Record which of the three `*-azurebatch-*` objects exist (NSG, public IP, load balancer), or, if cluster creation failed, the authorisation error **verbatim**. Both outcomes are findings. Available now and only now. Discharges **FR-016** (first half), **SC-009**.
+- [X] T014 [AZURE] [AUTHOR] **SC-002** — `az ml compute show` and `az ml compute list-nodes` on the cluster. Passes when every node count is 0 and `provisioning_state` is `Succeeded`. **Read the service, not the template**: `min_instances: 0` in the output is the request echoed back and does not satisfy this. Discharges **SC-002**, **FR-017**.
+- [X] T015 [AZURE] [AUTHOR] Confirm the size against live quota: `az ml compute list-usage -g rg-ai300-test01 -w <ws> -o table`. Record the DSv2 family limit and what the cluster now holds. Discharges **SC-005** on the declared side; T019 confirms it on the allocated side.
 
 **Checkpoint**: The cluster exists, rests at zero, and its size is inside quota.
 
 ---
 
 ## Phase 4: The CI authority loop
+
+> **⚠️ NOT STARTED — and Phase 5 was run before it, deliberately.**
+>
+> Phase 4 needs a push and a gate approval, both of which are the author's to
+> perform. Phase 5 does not depend on it: the resources exist from the by-hand
+> deployment in T011, and the two phases prove independent things — Phase 4 that
+> *CI* can deploy them, Phase 5 that they *work*. Running 5 first cost nothing
+> and left 4 unchanged.
+>
+> **Until Phase 4 is done, this feature has not shown that the governed deploy
+> path still functions.** That is the largest outstanding item, not a formality.
 
 **Goal**: The deployment succeeds *as the deployment identity*, with the role
 widened by exactly what was refused.
@@ -149,11 +160,11 @@ identity that is not the author's.
 **Independent test**: A job's output checksum equals a checksum recorded before
 the job existed.
 
-- [ ] T019 [AZURE] [AUTHOR] Upload the sample file with the **account key**: `az storage blob upload … --auth-mode key`. Negligible cost. This is setup, not a claim — how the file arrives is not what is being tested, and saying so plainly is what keeps the evidence honest.
-- [ ] T020 [AZURE] [AUTHOR] **The discriminator. Must run before T021.** Attempt `az storage blob download … --auth-mode login`. **This is expected to FAIL** with `AuthorizationPermissionMismatch`. Capture the error verbatim. It establishes that the author holds `Owner` and no blob data role — so a successful read by the job cannot have used the author's credentials. **If it unexpectedly succeeds, stop**: the discriminator is gone and T021's result would be uninterpretable. Discharges **FR-018**'s precondition, **FR-019**.
-- [ ] T021 [AZURE] [AUTHOR] Submit the job: `az ml job create -f mlops/datastore-check/job.yml --stream`. **~0.005 €** (one `DS1_v2` node, a few minutes). While it runs, confirm allocation with `az ml compute list-nodes` — expect ≥ 1 node. Discharges **SC-003**, the allocation half of **SC-004**, and **SC-005** on the allocated side.
-- [ ] T022 [AZURE] [AUTHOR] Compare the job's logged sha256, byte count and row count against the values recorded in T002. Passes only on an exact match. **A `Completed` job does not satisfy this** — the spec's edge case is a job that starts, logs and exits zero. Discharges **SC-003**.
-- [ ] T023 [AZURE] [AUTHOR] Wait past the 120 s idle interval, then `az ml compute list-nodes` — expect empty, **with no command run to make it so**. A cluster scaled down by hand demonstrates the operator, not the configuration. Discharges **SC-004**.
+- [X] T019 [AZURE] [AUTHOR] Upload the sample file with the **account key**: `az storage blob upload … --auth-mode key`. Negligible cost. This is setup, not a claim — how the file arrives is not what is being tested, and saying so plainly is what keeps the evidence honest.
+- [X] T020 [AZURE] [AUTHOR] **The discriminator. Must run before T021.** Attempt `az storage blob download … --auth-mode login`. **This is expected to FAIL** with `AuthorizationPermissionMismatch`. Capture the error verbatim. It establishes that the author holds `Owner` and no blob data role — so a successful read by the job cannot have used the author's credentials. **If it unexpectedly succeeds, stop**: the discriminator is gone and T021's result would be uninterpretable. Discharges **FR-018**'s precondition, **FR-019**.
+- [X] T021 [AZURE] [AUTHOR] Submit the job: `az ml job create -f mlops/datastore-check/job.yml --stream`. **~0.005 €** (one `DS1_v2` node, a few minutes). While it runs, confirm allocation with `az ml compute list-nodes` — expect ≥ 1 node. Discharges **SC-003**, the allocation half of **SC-004**, and **SC-005** on the allocated side.
+- [X] T022 [AZURE] [AUTHOR] Compare the job's logged sha256, byte count and row count against the values recorded in T002. Passes only on an exact match. **A `Completed` job does not satisfy this** — the spec's edge case is a job that starts, logs and exits zero. Discharges **SC-003**.
+- [X] T023 [AZURE] [AUTHOR] Wait past the 120 s idle interval, then `az ml compute list-nodes` — expect empty, **with no command run to make it so**. A cluster scaled down by hand demonstrates the operator, not the configuration. Discharges **SC-004**.
 
 **Checkpoint**: The datastore and the cluster demonstrably work together.
 
@@ -163,13 +174,13 @@ the job existed.
 
 **Goal**: Answer what was open, by looking. Both outcomes acceptable.
 
-- [ ] T024 [AZURE] [AUTHOR] **The necessity test.** Requires T021–T022 to have passed. Delete the container role assignment, re-run the job, record the outcome, then redeploy `main.bicep` to restore it and confirm the job passes again. **~0.005 €.**
+- [X] T024 [AZURE] [AUTHOR] **The necessity test.** Requires T021–T022 to have passed. Delete the container role assignment, re-run the job, record the outcome, then redeploy `main.bicep` to restore it and confirm the job passes again. **~0.005 €.**
   - **Job fails on authorisation** → the grant is load-bearing; the cluster identity is the reader. Say so in the template comment.
   - **Job succeeds** → the grant is **inert**; the workspace identity's account-scope grant is doing the work. Say so plainly, exactly as `main.bicep` already does for its Key Vault assignment, or remove it.
 
   This is the check that stops feature 004 shipping a second decorative role assignment. Discharges **D7** ([research.md](./research.md)), and the "no inert authority" property borrowed from feature 003.
-- [ ] T025 [AZURE] [AUTHOR] Record Observation A (from T013) in `infra/DEPLOY.md`, with its date and what was actually seen. Update the "Where a failure is expected later" table if the resource-group grant turned out to be needed. Discharges **FR-016**, **SC-009**.
-- [ ] T026 [AZURE] [AUTHOR] Note whether a `Microsoft.Network/loadBalancers` resource exists in the resource group while the cluster rests at zero nodes: `az resource list -g rg-ai300-test01 --query "[?type=='Microsoft.Network/loadBalancers']"`. **Existence is not billing** — this is the first of the two steps that settle the question, and it is the half available today.
+- [X] T025 [AZURE] [AUTHOR] Record Observation A (from T013) in `infra/DEPLOY.md`, with its date and what was actually seen. Update the "Where a failure is expected later" table if the resource-group grant turned out to be needed. Discharges **FR-016**, **SC-009**.
+- [X] T026 [AZURE] [AUTHOR] Note whether a `Microsoft.Network/loadBalancers` resource exists in the resource group while the cluster rests at zero nodes: `az resource list -g rg-ai300-test01 --query "[?type=='Microsoft.Network/loadBalancers']"`. **Existence is not billing** — this is the first of the two steps that settle the question, and it is the half available today.
 - [ ] T027 ⏸ **DEFERRED — cannot be completed in this session.** [AZURE] [AUTHOR] Read Cost Management for a full day with the cluster at rest, filtered to `rg-ai300-test01`, looking for a Load Balancer service line on a day when no job ran. Available **24–48 hours** after T011. Then update `docs/exam-notes/compute-cost-model.md` § 7 — the table of unverified claims — with the answer and its date. **If it bills (~0.30 €/day), a cluster is not free at rest and the project's shutdown procedure changes from "leave it" to "delete it at the end of the week".** Carried into the next session's notes rather than dropped. Discharges **FR-016** (second half).
 
 **Checkpoint**: Everything observable today has been observed and written down.
@@ -179,9 +190,9 @@ the job existed.
 ## Phase 7: Polish and closing
 
 - [ ] T028 [AZURE] [AUTHOR] **SC-008** — Cost Management → Cost analysis scoped to `rg-ai300-test01`, **comparing two windows**: days before this feature against days spanning it. Passes when the delta is under 1 € and consists only of VM node-hours. A null cost is not a zero, and one window is not a comparison. Discharges **FR-020**.
-- [ ] T029 [AZURE] [AUTHOR] **SC-010** — confirm nothing is left running: `az ml compute list-nodes` empty, `az ml online-endpoint list` empty, `az ml batch-endpoint list` empty. **The feature does not close while a node is allocated.** Discharges **FR-021**.
-- [ ] T030 [LOCAL] Update `infra/DEPLOY.md`: the new resources and their observed values, the cluster's shutdown procedure, and the CI role additions with their run ids. Its established role is to be revised with what was observed.
-- [ ] T031 [LOCAL] Draft candidate `README.md` text in the author's first person, describing what was built and why the size and the identity were chosen as they were. **The author rewrites and commits it** — constitution principle IV.
+- [X] T029 [AZURE] [AUTHOR] **SC-010** — confirm nothing is left running: `az ml compute list-nodes` empty, `az ml online-endpoint list` empty, `az ml batch-endpoint list` empty. **The feature does not close while a node is allocated.** Discharges **FR-021**.
+- [X] T030 [LOCAL] Update `infra/DEPLOY.md`: the new resources and their observed values, the cluster's shutdown procedure, and the CI role additions with their run ids. Its established role is to be revised with what was observed.
+- [X] T031 [LOCAL] Draft candidate `README.md` text in the author's first person, describing what was built and why the size and the identity were chosen as they were. **The author rewrites and commits it** — constitution principle IV.
 - [ ] T032 [LOCAL] Close [contracts/role-additions.md](./contracts/role-additions.md): every operation added has a run id, the counts match, the `boundary` job is green.
 
 ---
