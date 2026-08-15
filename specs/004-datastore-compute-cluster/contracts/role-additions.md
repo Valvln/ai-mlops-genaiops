@@ -174,16 +174,52 @@ If the container grant fails on authorisation anyway, that is **not** a routine
 addition — it would mean the operation is scope-sensitive in a way 003 did not
 observe, and it gets written up rather than patched.
 
-## Closing check
+## Closing check — all three hold, 2026-08-15
 
-Before this feature closes, all three must hold:
-
-- [ ] Every operation added to `ci-identity.bicep` during feature 004 has a run
+- [X] Every operation added to `ci-identity.bicep` during feature 004 has a run
       id in the confirmed table above.
-- [ ] The count of rows in the confirmed table equals the count of operations
-      added to `verifiedActions` by this feature.
-- [ ] The `boundary` job of `infra-deploy.yml` is still green — the role was
-      widened by exactly what was refused, and not by more.
+- [X] The count of rows in the confirmed table equals the count of operations
+      added to `verifiedActions` by this feature: **5 and 5**. The role went from
+      13 to 18 operations.
+- [X] The `boundary` job of `infra-deploy.yml` is still green — run 31899938698
+      attempt 3, `The four refusals: success`, with P1 recording
+      `refused on Microsoft.Resources/subscriptions/resourcegroups/write, as
+      required`.
+
+The third is the one that matters, and it is worth saying why it was not a
+formality here. The first two count what was *written down*; both would pass
+even if the role had quietly become too wide. This feature added five operations
+to a deliberately narrow role — including one on a resource type inside the
+scope, which is the axis probe P4 exists to guard. The boundary job is the only
+check that pushes against the boundary instead of reading it, and it stayed
+green.
+
+## Final state
+
+| | |
+| --- | --- |
+| Operations before feature 004 | 13 |
+| Added by feature 004 | **5** |
+| Operations now | 18 |
+| Predicted | 7 |
+| Predicted and demanded | 5 |
+| Predicted and never demanded | 2 (`blobServices/containers/read`, `blobServices/read`) |
+| Demanded but not predicted | **0** |
+| Gated runs consumed | **2 failures + 1 success**, against a forecast of 4–7 failures |
+| Built-in roles assigned | **0** |
+| Wildcards | **0** |
+
+The forecast of four to seven rounds was wrong in the useful direction, and for
+a reason now understood rather than lucky: ARM's pre-flight validation reports
+all of a template's authorization failures at once, so the three writes arrived
+together instead of one per run.
+
+**Deployment record**, which is the evidence that something was actually
+deployed rather than merely reported green:
+
+```text
+ai300-ci-31899938698   Succeeded   2026-08-15T18:21:38Z
+```
 
 The third is the one that matters. The first two can both pass while the role
 has quietly become too wide, because they only count what was *written down*.
