@@ -187,24 +187,67 @@ def main() -> int:
         }
     )
 
-    # MLflow format, not a file upload. Phase 2 deploys this with no scoring
-    # script, which Azure ML can only derive from a model that carries its own
-    # metadata. A generic file upload would still satisfy "an artifact exists"
-    # while quietly forcing a scoring script the next day (research.md R8).
-    mlflow.sklearn.log_model(
-        sk_model=model,
-        artifact_path="model",
-        input_example=x_test[:5],
-    )
-
+    # Emitted BEFORE the model is written, and that ordering is a correction.
+    # Job placid_fish_sdyy5dh0yl put this block after the artifact call, the
+    # artifact call raised, and the log lost metrics that had already been
+    # computed and tracked. The whole point of duplicating them here is to have
+    # a path that survives when the artifact path does not; putting them second
+    # threw that away.
     print("METRIC-BEGIN", flush=True)
     print(f"METRIC accuracy={metrics['accuracy']!r}")
     print(f"METRIC f1={metrics['f1']!r}")
     print(f"METRIC predictions_sha256={prediction_digest}")
     print("METRIC-END", flush=True)
 
+    save_model(model, x_test)
+
     print("TRAIN-COMPLETE", flush=True)
     return 0
+
+
+def save_model(model, x_test) -> None:
+    """Write the model in MLflow format, by the mechanism that works here.
+
+    `mlflow.sklearn.log_model` is NOT used. On job placid_fish_sdyy5dh0yl it
+    failed with `404` on `/api/2.0/mlflow/logged-models`: the curated
+    environment ships MLflow 3.13.0, whose model logging goes through the
+    LoggedModel API, and the Azure ML tracking server does not implement that
+    endpoint. Not an authorization refusal — the same run had already written
+    params, metrics and tags to the workspace without complaint.
+
+    So the model is written to `./outputs/`, which Azure ML uploads to the run
+    on its own and which involves no MLflow API at all. `mlflow.log_artifacts`
+    is attempted afterwards as well, because if the classic artifact API does
+    work it puts the model at the canonical location — and its outcome is
+    PRINTED rather than assumed, so the next phase knows which path exists
+    instead of guessing.
+
+    MLflow format matters beyond "an artifact exists": Phase 2 deploys this with
+    no scoring script, which Azure ML can only derive from a model carrying its
+    own metadata (research.md R8).
+    """
+    model_dir = Path("outputs") / "model"
+    mlflow.sklearn.save_model(
+        sk_model=model,
+        path=str(model_dir),
+        input_example=x_test[:5],
+    )
+
+    print("MODEL-BEGIN", flush=True)
+    print(f"MODEL saved_to={model_dir}")
+    print(f"MODEL mlmodel_present={(model_dir / 'MLmodel').is_file()}")
+    for item in sorted(model_dir.rglob("*")):
+        if item.is_file():
+            print(f"MODEL file={item.relative_to(model_dir)} bytes={item.stat().st_size}")
+
+    # Reported, not swallowed. A try/except that hides its failure is how a job
+    # exits zero having done less than it claims.
+    try:
+        mlflow.log_artifacts(str(model_dir), artifact_path="model")
+        print("MODEL artifact_api=OK uploaded to run artifacts under model/")
+    except Exception as exc:  # noqa: BLE001 - the exception type is the finding
+        print(f"MODEL artifact_api=FAILED {type(exc).__name__}: {exc}")
+    print("MODEL-END", flush=True)
 
 
 if __name__ == "__main__":
