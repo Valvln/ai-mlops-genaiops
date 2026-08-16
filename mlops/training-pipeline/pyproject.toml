@@ -1,0 +1,34 @@
+[project]
+name = "ai300-training-pipeline"
+version = "0.1.0"
+description = "Local baseline and comparison for feature 005, pinned to match the curated training environment"
+requires-python = "==3.10.*"
+
+# Pinned to match curated environment
+# azureml://registries/azureml/environments/sklearn-1.5/versions/52,
+# which reports Ubuntu 20.04 / Python 3.10 / scikit-learn 1.5.
+#
+# The pin is what makes a metric disagreement interpretable. Comparing a run
+# from scikit-learn 1.5 against a baseline computed on some other version would
+# leave two candidate explanations for any difference - the job, or the library
+# - and the comparison exists precisely to have only one.
+#
+# The curated environment's tag gives no patch version, so the local patch may
+# differ from the image's. For a decision tree that is very unlikely to matter;
+# if the comparison does disagree, the versions printed by the job's ENV-PROBE
+# banner are the first place to look. See research.md R6.
+dependencies = [
+    "scikit-learn>=1.5,<1.6",
+    "numpy>=1.26,<2.0",
+    "pandas>=2.0,<3.0",
+    "mlflow>=2.0,<3.0",
+    # Local reading tool, not part of the job. It teaches the local MLflow
+    # client to resolve an `azureml://` tracking URI, which is how compare.py
+    # reads the run back OUT of the workspace. Reading the metrics from the job
+    # log alone would not settle FR-012: the point is that the record outlives
+    # the node, and only the tracking store can show that.
+    "azureml-mlflow>=1.57",
+]
+
+[tool.uv]
+package = false
