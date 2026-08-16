@@ -36,6 +36,20 @@ specs/**/.spec-context.json
 # into the spec artifacts and the deployment runbook instead.
 specs/**/evidence/
 
+# Generated dataset and downloaded model artifact for feature 005. Both are
+# build outputs: the CSV is reproducible from generate_data.py and its seed, and
+# the model is retrievable from the run that produced it. The scripts are the
+# source of truth, the bytes are not.
+mlops/training-pipeline/data/
+mlops/training-pipeline/downloaded-model/
+
+# The recorded baseline. Evidence of a measurement, not a source of truth - the
+# same reasoning that keeps specs/**/evidence/ out. Its values are written into
+# the feature's results.md, and generate_data.py and baseline.py reproduce the
+# file byte for byte from the pinned seed, so a clone rebuilds it rather than
+# inheriting it.
+mlops/training-pipeline/baseline.json
+
 # Personal study material: exam notes, flashcards, progress tracker.
 # Kept out of the repo deliberately - see the "*.local.md" convention.
 *.local.md
