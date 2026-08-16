@@ -55,9 +55,9 @@ before submission. No registry and no endpoint exist at any point.
 
 ## Setup
 
-- [ ] T001 Create the feature directory `mlops/training-pipeline/` with a `README.md` placeholder, **and add `mlops/training-pipeline/data/` and `mlops/training-pipeline/downloaded-model/` to `.gitignore`** — the generated dataset and the downloaded artifact are build outputs, and constitution principle II requires derived artifacts to be listed there. Declaring what in the directory is *not* source is part of establishing the directory
-- [ ] T002 Create `mlops/training-pipeline/pyproject.toml` pinning Python 3.10 and scikit-learn 1.5.x, numpy and pandas, to match curated environment `sklearn-1.5` version 52 (Ubuntu 20.04 / Python 3.10 / scikit-learn 1.5)
-- [ ] T003 Build the local environment with `uv sync` in `mlops/training-pipeline/`, and record the resolved scikit-learn, numpy and pandas versions into `specs/005-training-job-batch-endpoint/results.md`
+- [X] T001 Create the feature directory `mlops/training-pipeline/` with a `README.md` placeholder, **and add `mlops/training-pipeline/data/` and `mlops/training-pipeline/downloaded-model/` to `.gitignore`** — the generated dataset and the downloaded artifact are build outputs, and constitution principle II requires derived artifacts to be listed there. Declaring what in the directory is *not* source is part of establishing the directory
+- [X] T002 Create `mlops/training-pipeline/pyproject.toml` pinning Python 3.10 and scikit-learn 1.5.x, numpy and pandas, to match curated environment `sklearn-1.5` version 52 (Ubuntu 20.04 / Python 3.10 / scikit-learn 1.5)
+- [X] T003 Build the local environment with `uv sync` in `mlops/training-pipeline/`, and record the resolved scikit-learn, numpy and pandas versions into `specs/005-training-job-batch-endpoint/results.md`
 
 > The author's default interpreter is Python 3.14, which has no scikit-learn 1.5
 > wheels. `.venv` is already gitignored; the pinned spec is what gets tracked.
@@ -67,10 +67,10 @@ before submission. No registry and no endpoint exist at any point.
 **⚠️ Blocking**: US1 and US2 both rest on the dataset and the baseline. Nothing
 downstream is meaningful until T007 has written the baseline to disk.
 
-- [ ] T004 Write `mlops/training-pipeline/generate_data.py` — 2,000 rows × 5 float features + binary label, from `numpy.random.default_rng(42)`, fixed float formatting, per [data-model.md § 1](./data-model.md). Do **not** use `sklearn.datasets.make_classification`
-- [ ] T005 Run the generator to produce `mlops/training-pipeline/data/training.csv`; assert both classes are present in both the 1500/500 positional splits and neither falls below 30%; record byte count, row count and `sha256` into `results.md`
-- [ ] T006 Write `mlops/training-pipeline/baseline.py` — loads the CSV, applies the positional split, fits `DecisionTreeClassifier(max_depth=4, random_state=42)`, computes accuracy and F1 on the **test split only**. Take the values from the pinned table in [data-model.md § 2](./data-model.md); `train.py` must read the same ones
-- [ ] T007 Run the baseline to write `mlops/training-pipeline/baseline.json` holding params, metrics, the prediction vector and its digest, `dataset_sha256`, and installed library versions
+- [X] T004 Write `mlops/training-pipeline/generate_data.py` — 2,000 rows × 5 float features + binary label, from `numpy.random.default_rng(42)`, fixed float formatting, per [data-model.md § 1](./data-model.md). Do **not** use `sklearn.datasets.make_classification`
+- [X] T005 Run the generator to produce `mlops/training-pipeline/data/training.csv`; assert both classes are present in both the 1500/500 positional splits and neither falls below 30%; record byte count, row count and `sha256` into `results.md`
+- [X] T006 Write `mlops/training-pipeline/baseline.py` — loads the CSV, applies the positional split, fits `DecisionTreeClassifier(max_depth=4, random_state=42)`, computes accuracy and F1 on the **test split only**. Take the values from the pinned table in [data-model.md § 2](./data-model.md); `train.py` must read the same ones
+- [X] T007 Run the baseline to write `mlops/training-pipeline/baseline.json` holding params, metrics, the prediction vector and its digest, `dataset_sha256`, and installed library versions
 
 > **T007 must complete before T014.** A baseline written after the job has run is
 > not a baseline. The file's timestamp is the evidence of ordering.
