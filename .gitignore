@@ -43,6 +43,12 @@ specs/**/evidence/
 mlops/training-pipeline/data/
 mlops/training-pipeline/downloaded-model/
 
+# MLflow's local fallback store. It appears whenever a script calls into MLflow
+# without an azureml-backed tracking URI - which is precisely the failure mode
+# train.py refuses to train under. Never a deliverable, and on a compute node it
+# is what silently swallows a run's metrics before the node is released.
+mlruns/
+
 # The recorded baseline. Evidence of a measurement, not a source of truth - the
 # same reasoning that keeps specs/**/evidence/ out. Its values are written into
 # the feature's results.md, and generate_data.py and baseline.py reproduce the
