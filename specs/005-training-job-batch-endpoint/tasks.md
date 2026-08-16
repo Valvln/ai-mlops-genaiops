@@ -131,7 +131,7 @@ out, everything below still gets done; Phase 2 slips.
 - [X] T030 Derive billable node time from the job's own `created`/`start`/`end` timestamps plus the 120-second idle tail, and convert at ≈0.082 €/node-hour plus the warm-window term (SC-006). Record the **job-active window**, which Phase 2's SC-013 needs as an input
 - [X] T031 [P] Write `mlops/training-pipeline/README.md` — what was built, the observed values, and the answer to the MLflow tracking question
 - [X] T032 [P] Write the Phase 1 section of `specs/005-training-job-batch-endpoint/results.md`, including any prediction from `research.md` that was contradicted, recorded as the entry rather than as a quiet correction
-- [ ] T033 Propose commits for the author: one for the pipeline scripts, one for the workload definition, one for the results. One logical change each
+- [X] T033 Propose commits for the author: one for the pipeline scripts, one for the workload definition, one for the results. One logical change each
 
 ---
 
