@@ -79,32 +79,42 @@ downstream is meaningful until T007 has written the baseline to disk.
 
 **Goal**: SC-001, SC-002, SC-003, SC-005.
 
-- [ ] T008 [US1] Write the environment probe in `mlops/training-pipeline/train.py` — emit the `ENV-PROBE` block per [contracts/training-run.md § 1](./contracts/training-run.md), reporting `MLFLOW_TRACKING_URI`, the resolved `mlflow.get_tracking_uri()`, and the versions of mlflow, azureml-mlflow, scikit-learn, numpy, pandas
-- [ ] T009 [US1] Add the tracking assertion to `train.py` — if the resolved URI is not `azureml`-backed, exit **3** without training. This is the load-bearing check: unconfigured MLflow writes to a local `mlruns/` on the node and the job would otherwise exit zero having tracked nothing
-- [ ] T010 [US1] Add the data probe to `train.py` — emit the `DATA-PROBE` block (mount path, bytes, `sha256`, rows, split sizes), and exit **4** if the digest disagrees with the expected value passed in
-- [ ] T011 [US1] Add training and tracking to `train.py` — fit the same estimator as `baseline.py`, log params and metrics per [contracts/training-run.md § 3](./contracts/training-run.md), echo the `METRIC` block at full precision, and log the model in **MLflow format** (required for Phase 2's no-code deployment)
-- [ ] T012 [US1] Write `mlops/training-pipeline/train-job.yml` — curated environment pinned to `azureml://registries/azureml/environments/sklearn-1.5/versions/52`, input as `uri_file` addressed through `azureml://datastores/ai300_training_data/paths/...` with `ro_mount`, `compute: azureml:ai300-cpu-cluster`, and `identity: type: managed`
-- [ ] T013 [US1] Upload `training.csv` to the `training-data` container with `--auth-mode key`, and confirm the listed byte count equals T005's. The account key is required because the author holds no data-plane role — established in feature 004, and setup rather than a claim under test
-- [ ] T014 [US1] 💶 Submit the training job with `--stream`. **One submission**: the script probes, asserts, trains, tracks and logs in a single cluster activation, because billing runs from allocation
-- [ ] T015 [US1] While the job runs, read the cluster from **ARM** and record at least one allocated node — `az ml compute show` returns an empty `node_state_counts`, and an empty field is not a zero (SC-002, first half)
-- [ ] T016 [US1] Read the job's terminal status **from the service**, not from the submitting command's exit code (SC-001)
-- [ ] T017 [US1] Read `user_logs/std_log.txt` from `azureml/ExperimentRun/dcid.<job>/` using the **account key** — `az ml job download` fails with `AuthorizationPermissionMismatch` on this workspace for the same data-plane reason as T013
-- [ ] T018 [US1] Record the `ENV-PROBE` answer into `results.md`: whether the workspace configured the tracking URI or the job had to declare it, **with the observed value and what would have been seen had the answer been the other one** (SC-005, settles FR-009 and [research.md § R1](./research.md))
-- [ ] T019 [US1] Verify the `DATA-PROBE` `sha256` equals T005's recorded digest — this is what stops the whole verification passing on data the job supplied to itself
-- [ ] T020 [US1] Write `mlops/training-pipeline/compare.py` — exact match on `dataset_sha256`, params and the prediction-vector digest; `1e-9` absolute on accuracy and F1; non-zero exit on any disagreement, per [contracts/training-run.md § 5](./contracts/training-run.md)
-- [ ] T021 [US1] Run `compare.py` against `baseline.json` and the tracked run. **This is the criterion** (SC-003). On disagreement: record it as a finding and investigate — first the scikit-learn patch version from the `ENV-PROBE` banner, then T019's digest. **Do not widen the tolerance** (FR-016)
+- [X] T008 [US1] Write the environment probe in `mlops/training-pipeline/train.py` — emit the `ENV-PROBE` block per [contracts/training-run.md § 1](./contracts/training-run.md), reporting `MLFLOW_TRACKING_URI`, the resolved `mlflow.get_tracking_uri()`, and the versions of mlflow, azureml-mlflow, scikit-learn, numpy, pandas
+- [X] T009 [US1] Add the tracking assertion to `train.py` — if the resolved URI is not `azureml`-backed, exit **3** without training. This is the load-bearing check: unconfigured MLflow writes to a local `mlruns/` on the node and the job would otherwise exit zero having tracked nothing
+- [X] T010 [US1] Add the data probe to `train.py` — emit the `DATA-PROBE` block (mount path, bytes, `sha256`, rows, split sizes), and exit **4** if the digest disagrees with the expected value passed in
+- [X] T011 [US1] Add training and tracking to `train.py` — fit the same estimator as `baseline.py`, log params and metrics per [contracts/training-run.md § 3](./contracts/training-run.md), echo the `METRIC` block at full precision, and log the model in **MLflow format** (required for Phase 2's no-code deployment)
+- [X] T012 [US1] Write `mlops/training-pipeline/train-job.yml` — curated environment pinned to `azureml://registries/azureml/environments/sklearn-1.5/versions/52`, input as `uri_file` addressed through `azureml://datastores/ai300_training_data/paths/...` with `ro_mount`, `compute: azureml:ai300-cpu-cluster`, and `identity: type: managed`
+- [X] T013 [US1] Upload `training.csv` to the `training-data` container with `--auth-mode key`, and confirm the listed byte count equals T005's. The account key is required because the author holds no data-plane role — established in feature 004, and setup rather than a claim under test
+- [X] T014 [US1] 💶 Submit the training job with `--stream`. **One submission**: the script probes, asserts, trains, tracks and logs in a single cluster activation, because billing runs from allocation
+- [X] T015 [US1] While the job runs, read the cluster from **ARM** and record at least one allocated node — `az ml compute show` returns an empty `node_state_counts`, and an empty field is not a zero (SC-002, first half)
+- [X] T016 [US1] Read the job's terminal status **from the service**, not from the submitting command's exit code (SC-001)
+- [X] T017 [US1] Read `user_logs/std_log.txt` from `azureml/ExperimentRun/dcid.<job>/` using the **account key** — `az ml job download` fails with `AuthorizationPermissionMismatch` on this workspace for the same data-plane reason as T013
+- [X] T018 [US1] Record the `ENV-PROBE` answer into `results.md`: whether the workspace configured the tracking URI or the job had to declare it, **with the observed value and what would have been seen had the answer been the other one** (SC-005, settles FR-009 and [research.md § R1](./research.md))
+- [X] T019 [US1] Verify the `DATA-PROBE` `sha256` equals T005's recorded digest — this is what stops the whole verification passing on data the job supplied to itself
+- [X] T020 [US1] Write `mlops/training-pipeline/compare.py` — exact match on `dataset_sha256`, params and the prediction-vector digest; `1e-9` absolute on accuracy and F1; non-zero exit on any disagreement, per [contracts/training-run.md § 5](./contracts/training-run.md)
+- [X] T021 [US1] Run `compare.py` against `baseline.json` and the tracked run. **This is the criterion** (SC-003). On disagreement: record it as a finding and investigate — first the scikit-learn patch version from the `ENV-PROBE` banner, then T019's digest. **Do not widen the tolerance** (FR-016)
 
 ## User Story 2 — the trained model can be got back out (P1)
 
 **Goal**: SC-004. Also what makes Phase 2 startable from a verified input.
 
-- [ ] T022 [US2] Download the model artifact from the completed run **after** the node has been released, into `mlops/training-pipeline/downloaded-model/` (gitignored — a build output, not source)
-- [ ] T023 [US2] Load the downloaded model in the pinned local environment and score the same test inputs; require the prediction vector to match `baseline.json` **exactly** (SC-004). A listed artifact proves an upload happened; only this proves a model
+- [X] T022 [US2] Download the model artifact from the completed run **after** the node has been released, into `mlops/training-pipeline/downloaded-model/` (gitignored — a build output, not source)
+- [X] T023 [US2] Load the downloaded model in the pinned local environment and score the same test inputs; require the prediction vector to match `baseline.json` **exactly** (SC-004). A listed artifact proves an upload happened; only this proves a model
 
 ## Contingency — only if a refusal arrives
 
 Skip entirely unless T014 or T022 is refused. [research.md § R3](./research.md)
 predicts this will **not** fire, at deliberately low confidence.
+
+> **DID NOT FIRE — 2026-08-16.** Left unticked deliberately: these tasks were not
+> performed, and ticking them would claim work that did not happen. Job
+> `placid_fish_sdyy5dh0yl` did fail, but on a `404` from an unimplemented MLflow 3
+> endpoint, not on a refusal — and the same run had already written params,
+> metrics and tags to the workspace, so the write path was demonstrably
+> authorised. R3's low-confidence prediction was right: feature 005 needed no role
+> assignment, no `main.bicep` change and no gated deployment. Establishing *that*
+> was T024's actual job, and it is the one step of this block that was carried
+> out. See [results.md](./results.md).
 
 - [ ] T024 [US1] Establish the failure is a **server-side refusal** — not a client-side failure, a wrong path, or an empty result (FR-025). Feature 004 recorded that not every refusal says `AuthorizationFailed`: the same run returned an ARM `AuthorizationFailed` and an Azure ML `UserError` with `ForbiddenError` only in an inner error
 - [ ] T025 [US1] Add **exactly** the operation and scope the refusal names, to the principal it names, as a role assignment in `infra/main.bicep`, with the failing job name as its provenance comment. Never a built-in role, never a wildcard
@@ -116,11 +126,11 @@ predicts this will **not** fire, at deliberately low confidence.
 **⚠️ Phase 1 closes here whether or not Phase 2 happens.** If the day has run
 out, everything below still gets done; Phase 2 slips.
 
-- [ ] T028 Verify the cluster returned to zero nodes unprompted, read from ARM, and record the transition (SC-002, second half). **Then re-read the run's parameters and metrics from the workspace, with the node gone** — this settles FR-012, and it is only meaningful in this order: a record that survives the compute that produced it is exactly what distinguishes real tracking from a local `mlruns/` directory that died at scale-down
-- [ ] T029 Confirm no endpoint of any kind exists — online, batch, or compute instance (SC-008)
-- [ ] T030 Derive billable node time from the job's own `created`/`start`/`end` timestamps plus the 120-second idle tail, and convert at ≈0.082 €/node-hour plus the warm-window term (SC-006). Record the **job-active window**, which Phase 2's SC-013 needs as an input
-- [ ] T031 [P] Write `mlops/training-pipeline/README.md` — what was built, the observed values, and the answer to the MLflow tracking question
-- [ ] T032 [P] Write the Phase 1 section of `specs/005-training-job-batch-endpoint/results.md`, including any prediction from `research.md` that was contradicted, recorded as the entry rather than as a quiet correction
+- [X] T028 Verify the cluster returned to zero nodes unprompted, read from ARM, and record the transition (SC-002, second half). **Then re-read the run's parameters and metrics from the workspace, with the node gone** — this settles FR-012, and it is only meaningful in this order: a record that survives the compute that produced it is exactly what distinguishes real tracking from a local `mlruns/` directory that died at scale-down
+- [X] T029 Confirm no endpoint of any kind exists — online, batch, or compute instance (SC-008)
+- [X] T030 Derive billable node time from the job's own `created`/`start`/`end` timestamps plus the 120-second idle tail, and convert at ≈0.082 €/node-hour plus the warm-window term (SC-006). Record the **job-active window**, which Phase 2's SC-013 needs as an input
+- [X] T031 [P] Write `mlops/training-pipeline/README.md` — what was built, the observed values, and the answer to the MLflow tracking question
+- [X] T032 [P] Write the Phase 1 section of `specs/005-training-job-batch-endpoint/results.md`, including any prediction from `research.md` that was contradicted, recorded as the entry rather than as a quiet correction
 - [ ] T033 Propose commits for the author: one for the pipeline scripts, one for the workload definition, one for the results. One logical change each
 
 ---
