@@ -55,7 +55,7 @@ before submission. No registry and no endpoint exist at any point.
 
 ## Setup
 
-- [ ] T001 Create the feature directory `mlops/training-pipeline/` with an empty `README.md` placeholder
+- [ ] T001 Create the feature directory `mlops/training-pipeline/` with a `README.md` placeholder, **and add `mlops/training-pipeline/data/` and `mlops/training-pipeline/downloaded-model/` to `.gitignore`** — the generated dataset and the downloaded artifact are build outputs, and constitution principle II requires derived artifacts to be listed there. Declaring what in the directory is *not* source is part of establishing the directory
 - [ ] T002 Create `mlops/training-pipeline/pyproject.toml` pinning Python 3.10 and scikit-learn 1.5.x, numpy and pandas, to match curated environment `sklearn-1.5` version 52 (Ubuntu 20.04 / Python 3.10 / scikit-learn 1.5)
 - [ ] T003 Build the local environment with `uv sync` in `mlops/training-pipeline/`, and record the resolved scikit-learn, numpy and pandas versions into `specs/005-training-job-batch-endpoint/results.md`
 
@@ -69,7 +69,7 @@ downstream is meaningful until T007 has written the baseline to disk.
 
 - [ ] T004 Write `mlops/training-pipeline/generate_data.py` — 2,000 rows × 5 float features + binary label, from `numpy.random.default_rng(42)`, fixed float formatting, per [data-model.md § 1](./data-model.md). Do **not** use `sklearn.datasets.make_classification`
 - [ ] T005 Run the generator to produce `mlops/training-pipeline/data/training.csv`; assert both classes are present in both the 1500/500 positional splits and neither falls below 30%; record byte count, row count and `sha256` into `results.md`
-- [ ] T006 Write `mlops/training-pipeline/baseline.py` — loads the CSV, applies the positional split, fits `DecisionTreeClassifier` with fixed `max_depth` and `random_state=42`, computes accuracy and F1 on the **test split only**, per [data-model.md § 2](./data-model.md)
+- [ ] T006 Write `mlops/training-pipeline/baseline.py` — loads the CSV, applies the positional split, fits `DecisionTreeClassifier(max_depth=4, random_state=42)`, computes accuracy and F1 on the **test split only**. Take the values from the pinned table in [data-model.md § 2](./data-model.md); `train.py` must read the same ones
 - [ ] T007 Run the baseline to write `mlops/training-pipeline/baseline.json` holding params, metrics, the prediction vector and its digest, `dataset_sha256`, and installed library versions
 
 > **T007 must complete before T014.** A baseline written after the job has run is
@@ -116,7 +116,7 @@ predicts this will **not** fire, at deliberately low confidence.
 **⚠️ Phase 1 closes here whether or not Phase 2 happens.** If the day has run
 out, everything below still gets done; Phase 2 slips.
 
-- [ ] T028 Verify the cluster returned to zero nodes unprompted, read from ARM, and record the transition (SC-002, second half)
+- [ ] T028 Verify the cluster returned to zero nodes unprompted, read from ARM, and record the transition (SC-002, second half). **Then re-read the run's parameters and metrics from the workspace, with the node gone** — this settles FR-012, and it is only meaningful in this order: a record that survives the compute that produced it is exactly what distinguishes real tracking from a local `mlruns/` directory that died at scale-down
 - [ ] T029 Confirm no endpoint of any kind exists — online, batch, or compute instance (SC-008)
 - [ ] T030 Derive billable node time from the job's own `created`/`start`/`end` timestamps plus the 120-second idle tail, and convert at ≈0.082 €/node-hour plus the warm-window term (SC-006). Record the **job-active window**, which Phase 2's SC-013 needs as an input
 - [ ] T031 [P] Write `mlops/training-pipeline/README.md` — what was built, the observed values, and the answer to the MLflow tracking question
@@ -160,13 +160,13 @@ interpretation needs T030's job-active window.
 
 **Goal**: SC-011, SC-012.
 
-- [ ] T042 [US4] Write `mlops/training-pipeline/batch-endpoint.yml` — batch kind. A real-time endpoint must not be created at any point (FR-019)
-- [ ] T043 [US4] Write `mlops/training-pipeline/batch-deployment.yml` — names the registered version **explicitly, never `latest`**; `compute: azureml:ai300-cpu-cluster`; `instance_count: 1`; **no scoring script** (no-code, derived from the MLflow model); output action append-row
+- [ ] T042 [US4] [P] Write `mlops/training-pipeline/batch-endpoint.yml` — batch kind. A real-time endpoint must not be created at any point (FR-019)
+- [ ] T043 [US4] [P] Write `mlops/training-pipeline/batch-deployment.yml` — names the registered version **explicitly, never `latest`**; `compute: azureml:ai300-cpu-cluster`; `instance_count: 1`; **no scoring script** (no-code, derived from the MLflow model); output action append-row
 - [ ] T044 [US4] Create the endpoint with `az ml batch-endpoint create`
 - [ ] T045 [US4] Create the deployment with `az ml batch-deployment create`
 - [ ] T046 [US4] Confirm the cluster is **still at zero nodes** after the deployment is provisioned — provisioning a deployment is not scoring, and a node here would mean the batch endpoint is billing when it should not
 - [ ] T047 [US4] [P] Build the scoring input at `mlops/training-pipeline/scoring-input/` from test-split rows, and **verify both predicted classes are present** before upload (FR-022). A single-class input would be satisfied by a deployment returning a constant
-- [ ] T048 [US4] [P] Download the **registered version** from the registry and compute its predictions on the scoring input locally — this is the right-hand side of the comparison, and it must be the registered model, not the Phase 1 local model
+- [ ] T048 [US4] Download the **registered version** from the registry and compute its predictions on the scoring input locally — this is the right-hand side of the comparison, and it must be the registered model, not the Phase 1 local model. **Depends on T047**: there is no input to predict on until the scoring set exists
 - [ ] T049 [US4] Upload the scoring input to the `training-data` container with `--auth-mode key`
 - [ ] T050 [US4] 💶 Invoke the batch endpoint on the prepared input and wait for the scoring job to complete
 - [ ] T051 [US4] Retrieve the scoring output file
@@ -223,7 +223,7 @@ Genuinely few, because the feature is a chain of verifications and each link
 checks the previous one.
 
 - **T031, T032** — README and results, different files, after T030
-- **T047, T048** — scoring input and the local prediction side, different files
+- **T042, T043** — endpoint and deployment definitions, different files, both before either is applied
 - **T054, T055, T056** — three documents, different files
 
 **T014 and T050 must not be parallelised with anything**, and not because of file

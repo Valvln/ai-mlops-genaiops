@@ -135,7 +135,11 @@ machine, to a tolerance tight enough to be meaningful. **The estimator must
 therefore be chosen for reproducibility across platforms, not for being the
 obvious teaching example.**
 
-**Decision: `DecisionTreeClassifier`, with `max_depth` and `random_state` fixed.**
+**Decision: `DecisionTreeClassifier(max_depth=4, random_state=42)`.** The values
+are pinned in [data-model.md § 2](./data-model.md), which both `train.py` and
+`baseline.py` read from — a divergence between the two scripts would present as a
+metric disagreement, and that is the one cause the comparison cannot tell apart
+from a real tracking fault.
 
 **Rationale**: tree fitting is comparison-and-counting over the data. It does not
 route through BLAS, so it does not inherit the difference between Apple's

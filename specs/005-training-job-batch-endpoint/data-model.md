@@ -63,6 +63,25 @@ of contradicting a tracked result.
 **Persisted to disk as JSON**, so the comparison later reads a recorded file
 rather than re-deriving values in the same process that checks them.
 
+### Pinned values — the single source of truth
+
+Both `train.py` and `baseline.py` read these numbers from here. A divergence
+between the two scripts would surface as a metric disagreement and be
+misdiagnosed as a tracking or data fault — it is the one cause the comparison
+cannot tell apart from a real failure, which is why the values live in one place
+rather than in each script.
+
+| Parameter | Value |
+| --- | --- |
+| `estimator` | `DecisionTreeClassifier` |
+| `random_state` | 42 |
+| `max_depth` | **4** |
+| `train_rows` / `test_rows` | 1500 / 500, positional |
+| Generator seed | 42 |
+
+`max_depth: 4` is chosen so that accuracy lands clear of both degenerate ends —
+neither 1.0, which would make the comparison undiscriminating, nor near chance.
+
 **Validation**: written before submission; the file's own timestamp is the
 evidence of ordering. A baseline computed after the job is not a baseline, it is
 a rationalisation.

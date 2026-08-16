@@ -72,7 +72,7 @@ read with a checksum for the same reason.
 | --- | --- | --- |
 | Param | `seed` | 42 |
 | Param | `estimator` | `DecisionTreeClassifier` |
-| Param | `max_depth` | Fixed, stated in the job definition |
+| Param | `max_depth` | 4 — pinned in [data-model.md § 2](../data-model.md), which is the single source of truth for it |
 | Param | `train_rows`, `test_rows` | 1500 / 500 |
 | Param | `dataset_sha256` | Ties the run to the exact bytes |
 | Metric | `accuracy` | Test split |

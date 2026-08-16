@@ -76,7 +76,7 @@ identity runs as the **compute's** identity, not the workspace's, and a grant
 held by one principal does not authorise a read performed by another. That
 identity currently holds exactly one data-plane grant. This feature asks it to do
 more than read one container, so a refusal is an expected event rather than a
-surprise — see FR-020.
+surprise — see FR-023.
 
 ### A criterion that passes is not an objective that is met
 
@@ -242,7 +242,7 @@ downloadable, verified model with no registry and no endpoint involved.
    to the local baseline's predictions on the same inputs.
 2. **Given** the author holds no data-plane role on the storage account,
    **When** retrieval is attempted, **Then** either it succeeds by a path that is
-   recorded, or the refusal is identified as a refusal and resolved by FR-020
+   recorded, or the refusal is identified as a refusal and resolved by FR-023
    rather than worked around silently.
 
 ---
@@ -338,7 +338,7 @@ other story.
 - **The compute identity is refused when writing.** It currently holds one
   read grant on one container. Writing a model artifact or a tracking record may
   be refused. This is an expected discovery, not a defect, and is resolved by
-  FR-020.
+  FR-023.
 - **A refusal is mistaken for a failure.** A command that never reached the
   service, an empty result, and an authorisation denial look similar at the exit
   code. The class of failure must be established from a server-side response
