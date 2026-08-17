@@ -412,3 +412,162 @@ the planning model had no place for it at all.
 | R10 — measured within a factor of 2 of the estimate | ✅ 1.11× on the total, with the component caveat above |
 
 R7, R8 and R9 remain open until the endpoint is built.
+
+### The registry versions — SC-009, SC-010 (T039–T041)
+
+Registered **from the completed run**, not from the local download, so the run
+reference is a property of the record rather than a note beside it.
+
+| | Version 1 | Version 2 | Version 3 |
+| --- | --- | --- | --- |
+| Registered from | job `placid_knot_z03v76ysql` | the same job, again | a staged datastore path |
+| `job_name` | `placid_knot_z03v76ysql` | `placid_knot_z03v76ysql` | **null** |
+| `type` | `mlflow_model` | `mlflow_model` | `mlflow_model` |
+| Flavors read by Azure ML | `python_function`, `sklearn` | — | — |
+
+Version 2 exists to demonstrate rather than assert: registering identical bytes
+a second time under the same name produced a **distinct higher version**, and
+version 1 remained retrievable afterwards. Reading a version field proves a field
+exists; only the second registration proves the registry versions.
+
+Version 3 came later, from the deployment attempts, and is described below.
+
+### The batch endpoint bills nothing while idle — SC-012, first half (T044–T046)
+
+With the endpoint created and a deployment provisioned that declares
+`instance_count: 1`:
+
+```
+currentNodeCount 0 | allocationState Steady | all node state counts zero
+```
+
+That is the entire batch-versus-online argument, observed rather than quoted: the
+deployment object exists, names a cluster, declares an instance count — and no
+compute is allocated. A managed online endpoint would have been billing from the
+moment it was created.
+
+### SC-011 — NOT ACHIEVED. The endpoint does not yet answer.
+
+Five invocations, none of which produced a prediction. Recorded in full because
+the sequence is the finding: each failure was a different cause, and the last one
+is the one the specification anticipated.
+
+| # | Job | What it reached | Cause |
+| --- | --- | --- | --- |
+| 1 | `batchjob-c770a812` | image build | no-code build: `azureml-dataset-runtime` needs `pyarrow<4`, mlflow 3.13 needs `>=4` |
+| 2 | `batchjob-91968521` | image build | same conflict, unmasked — the `pip<24.1` pin worked |
+| 3 | `batchjob-eebd43b5` | image build | numpy 1.22.4 built from source, fails on Python 3.10's `_Py_HashDouble` |
+| 4 | `batchjob-4bd05ecb` | image build | same, traced to pip backtracking `azureml-dataset-runtime` to an ancient version |
+| 5 | `batchjob-3e916806` | **the compute node** | **`PermissionDenied` reading the model** |
+
+**No node was allocated for the first four.** The image build runs on a build
+service, so four of the five failures cost no node time at all — which is why
+this sequence was affordable.
+
+#### R8 is contradicted: no-code deployment is not available here
+
+The decision was to log the model in MLflow format precisely so that Azure ML
+would derive the scoring script and the environment. It derives them by
+synthesising an environment from the model's `conda.yaml` and adding
+`azureml-dataset-runtime`, and:
+
+```
+mlflow 3.13.0                 requires pyarrow >=4.0.0,<25
+azureml-dataset-runtime[fuse] requires pyarrow >=0.17.0,<4.0.0
+```
+
+Empty intersection, across all 35 published versions of that package. The build
+ends in `ResolutionImpossible` before a node is allocated.
+
+**The first fix worked and proved the wrong thing.** Pinning `pip<24.1` in a
+model variant (registered as version 3) removed 1,580 "invalid metadata"
+warnings and let pip see the packages properly — which is how the *real*
+conflict became visible. A fix that makes a problem legible without solving it is
+worth recording as such.
+
+Attempting to keep no-code by naming the curated environment failed twice more:
+batch deployments reject a registry-scoped environment id, and `sklearn-1.5:52`
+is a build-context environment tagged `Training`, with no image to reference.
+Azure ML's own workspace batch environment is not addressable either.
+
+So the feature now has `scoring.py` and `scoring-env.yml` — two files and two
+failure modes that R8 set out to avoid, and the reason is a platform defect
+rather than a design change.
+
+**A second concession follows from the first**: the serving environment cannot
+contain mlflow, so `mlflow.pyfunc.load_model` is unavailable at scoring time and
+the model is loaded from the sklearn flavor's pickle directly. Verified locally
+first: `cloudpickle.load` on the registered `model.pkl` reproduces the
+prediction digest exactly. **The MLflow format buys nothing at serving time on
+this platform.**
+
+#### The environment resolver, and a three-level error
+
+Three further builds were spent below the surface of one error message:
+
+| Attempt | Reported error | Actual cause |
+| --- | --- | --- |
+| `ai300-batch-scoring:2` | numpy 1.22.4 fails to compile | not the pin — pip was resolving numpy for a source build |
+| `ai300-batch-scoring:3` | `azureml-dataprep-rslex~=2.8.0dev0` unavailable | pinning `>=1.44` moved the conflict rather than removing it |
+| `ai300-batch-scoring:4` | **builds** | `azureml-dataset-runtime` removed entirely |
+
+Unpinned, pip finds `azureml-dataset-runtime` 1.44.0 — which wants a perfectly
+modern `pyarrow>=23.0.1` — then **backtracks** to 1.43.0.post2, which wants
+`pyarrow<4.0.0`. No pyarrow 3 wheel exists for Python 3.10, so pip builds it from
+source, and *its* build dependencies demand `numpy==1.19.4`, which also has no
+cp310 wheel and fails against Python 3.10's changed `_Py_HashDouble` signature.
+**The reported error was three levels away from its cause**, and the package at
+the root of it is not one this feature ever asked for.
+
+#### The refusal the specification was designed for — T024, T025
+
+Version 4 of the environment built, the node allocated, the scoring script ran,
+and the job failed on the thing FR-023 exists to handle:
+
+```
+ScriptExecution.StreamAccess.Authentication
+PermissionDenied — "This request is not authorized to perform this operation
+using this permission."
+URI: .../datastores/workspaceartifactstore/paths/
+     ExperimentRun/dcid.placid_knot_z03v76ysql/model/
+```
+
+**Established as a server-side refusal before anything was granted** (FR-025): a
+named authorization error, on a named URI, from the service — not an empty
+result, not a wrong path, not a client-side failure.
+
+**R9 is contradicted on its subject.** It predicted the *batch endpoint's*
+identity would need access. ARM reports the endpoint has **no identity at all**
+(`identity: null`, `authMode: AADToken`); the model mount happens on the compute
+node, so the read is performed by the **cluster's** system-assigned identity —
+`55fa4cc8-…`, the same principal, and the same lesson, as feature 004. The
+prediction that a third principal would need a grant was right; the principal it
+named was wrong.
+
+Its only grant is `Storage Blob Data Reader` on the `training-data` container.
+The model lives in `azureml`.
+
+**The grant added to `infra/main.bicep` is exactly what the refusal names**: read,
+on the workspace artifact container, for the cluster's identity. Not Contributor,
+because no write has been refused. Not account scope. `az bicep build` is clean —
+**compiled, not deployed**; it reaches the subscription only through the gated
+run the author approves.
+
+**It also moves a boundary that was deliberately placed.** The feature 004 grant
+is scoped to the training container, and its comment gives the reason as keeping
+the cluster out of the workspace's own containers. Serving a model stored in the
+workspace's own container is incompatible with that. The reversal is recorded in
+the template beside the grant rather than left for someone to notice.
+
+### Cost so far, 2026-08-17
+
+One node allocation, from the fifth invocation: node present ≈07:38 → ≈07:50 UTC,
+about 11 minutes, of which roughly 4 were the scoring script. Four earlier
+invocations and six image builds allocated **no** cluster node.
+
+At the § 7.3 planning rates that is ≈0.015 € of node time plus the warm-window
+term — well inside the ≈0.07 € budgeted for Phase 2, and the measured figure is
+SC-014, readable 2026-08-18.
+
+Cluster verified back at **0 nodes, `Steady`** afterwards. One batch endpoint
+exists, no online endpoint, no compute instance.
