@@ -280,3 +280,135 @@ compares the implied duration against ≈2.4 h (0.38 h warm + ~2 h tail) versus
 
 R7, R8, R9 and R11 belong to Phase 2 and stay in the table unsettled rather than
 being removed.
+
+---
+
+## Phase 2 — 2026-08-17
+
+### The deferred cost readings (T034–T038)
+
+Read **2026-08-17 05:53 UTC**, covering the 2026-08-16 window. Grouped by meter,
+not by service total — the whole test depends on separating the balancer from the
+virtual machine on a day when both were active. The query returned on the first
+attempt; no `429` this time.
+
+| Meter | 15/08 € | 16/08 € |
+| --- | --- | --- |
+| Load Balancer · Standard Included LB Rules and Outbound Rules | 0.043925 | 0.026291 |
+| Storage · P10 LRS Disk | 0.011014 | **0.025422** |
+| Load Balancer · Standard Data Processed | 0.001620 | **0.021668** |
+| Virtual Machines · D1 v2/DS1 v2 | 0.024089 | 0.016381 |
+| Virtual Network · Standard IPv4 Static Public IP | 0.008785 | 0.005258 |
+| Storage · write / read / list operations | 0.002085 | 0.001297 |
+| **Total** | **0.091197** | **0.096347** |
+
+### SC-013 — the load balancer is NOT billed at rest
+
+Two arguments, and the first needs no rate at all.
+
+**A. The calendar argument.** A charge incurred at rest is a function of elapsed
+time, and 15/08 and 16/08 are both 24-hour days. The balancer billed **0.043925 €**
+on one and **0.026291 €** on the other — a 1.67× difference. A resting charge
+cannot vary with what was done during the day, because nothing was being done.
+So the meter tracks activity.
+
+**B. The arithmetic, at the rates § 7.2 of the cost model already records**
+(≈0.021 €/h for LB rules, ≈0.0042 €/h for the static IP):
+
+| Day | LB implied | IP implied | Agree? |
+| --- | --- | --- | --- |
+| 15/08 | 2.09 h | 2.09 h | ✅ |
+| 16/08 | **1.25 h** | **1.25 h** | ✅ |
+
+| 16/08 hypothesis, fixed in [research.md § R11](./research.md) before the reading | Implied duration |
+| --- | --- |
+| Billed only while warm | ≈2.4 h (0.38 h warm + ~2 h tail) |
+| Billed at rest as well | ≈24 h |
+| **Observed** | **1.25 h** |
+
+**The answer is "only while warm", by a factor of 19 against the alternative.**
+The observed figure is even *below* the warm-only hypothesis, because the tail
+was shorter than assumed: 1.25 h − 0.38 h of job window leaves a tail of ≈52
+minutes, against the ~2 h carried over from the 15/08 reading.
+
+**The inherited weakness, and why it does not sink the conclusion.** R11 recorded
+that the rate in the denominator is an Azure list price recalled from memory, not
+a measured rate, and that a wrong rate scales the implied duration
+proportionally. It survives for two reasons:
+
+- For "billed at rest" to be true, the LB rate would have to be **0.0011 €/h**,
+  19× below the recalled value.
+- **And the public IP rate would have to be wrong by the same factor**, because
+  the two meters — with independently recalled rates — agree on the implied
+  duration to two decimal places, on both days. A systematic error that lands two
+  separate rates on the same wrong answer twice is not a plausible failure.
+
+That agreement is the part that makes the test usable, and it was not designed
+in: it fell out of the data.
+
+**Consequence for the project**: the shutdown procedure in
+`docs/exam-notes/compute-cost-model.md` § 6 **does not change**. A cluster at
+`min_nodes: 0` may be left in place between sessions; it is genuinely free at
+rest. Deleting it at the end of a week would buy nothing and would cost the
+90-day Key Vault name lock on any teardown that took the resource group with it.
+
+### SC-007 — the estimate agreed, and three of its parts were wrong
+
+| | Estimated 16/08 | Measured | |
+| --- | --- | --- | --- |
+| Total | 0.037 – **0.087 €** | **0.096347 €** | **1.11×** — inside the factor-of-2 threshold ✅ |
+
+The threshold was fixed in R10 before the measurement, and the upper end of the
+estimate passes it comfortably. The lower end — the "no LB tail" case — is 2.60×
+off and is refuted.
+
+**But the total is right partly by cancellation, and that is worth more than the
+pass.** Component by component:
+
+| Term | Estimated | Measured | |
+| --- | --- | --- | --- |
+| VM + P10 OS disk | 0.0273 | 0.0418 | **1.53× under**-estimated |
+| LB rules + public IP | 0.0596 | 0.0315 | **1.9× over**-estimated |
+| LB · Standard Data Processed | **0.0000** | 0.0217 | **term absent from the model** |
+
+A total that lands within 11% while its three components are wrong by 1.5×, 1.9×
+and infinitely is exactly the shape of check this repository has learned to
+distrust: it passes, and it would have passed just as well if the model were
+nonsense. The pass is recorded; so is the fact that it proves less than it looks.
+
+### Two corrections the reading forces on the cost model
+
+**1. The OS disk outlives the node, and it is now the largest single node-side
+term.** On 16/08 the P10 disk billed **more than the virtual machine** — 0.025422
+against 0.016381:
+
+| | disk / VM | Implied disk lifetime | Node time |
+| --- | --- | --- | --- |
+| 15/08 (3 jobs) | 0.46 | ≈0.41 h | ≈0.42 h |
+| 16/08 (2 jobs) | **1.55** | ≈0.94 h | ≈0.33 h |
+
+The blended "≈0.082 €/node-hour for VM + P10 disk" rate assumed the two bill for
+the same duration. They do not: on 16/08 the disk was charged for roughly **three
+times** the node's lifetime. That is per-activation overhead — the disk is
+created before the node is usable and released after it is gone — so two short
+activations pay it twice.
+
+**This strengthens "fewer, longer jobs" with a second, independent mechanism.**
+The first was that provisioning is billed; the second is that the disk overhead
+is per activation and does not shrink with a shorter script.
+
+**2. `Load Balancer · Standard Data Processed` scales with what the job pulls,
+not with time.** It went from 0.001620 € to 0.021668 € — **13×** — while the
+balancer's own hours went *down*. The difference is what crossed the wire:
+2026-08-16's jobs pulled the `sklearn-1.5` curated image and pushed model
+artifacts back, twice. At 22.5% of the day's bill it is not a rounding term, and
+the planning model had no place for it at all.
+
+### Prediction scorecard — Phase 2, part one
+
+| Prediction | Outcome |
+| --- | --- |
+| R11 — the warm-only hypothesis, at 2–5 h | ⚠️ **direction right, magnitude wrong.** Warm-only is confirmed decisively, but the observed 1.25 h falls *below* the predicted 2–5 h band |
+| R10 — measured within a factor of 2 of the estimate | ✅ 1.11× on the total, with the component caveat above |
+
+R7, R8 and R9 remain open until the endpoint is built.

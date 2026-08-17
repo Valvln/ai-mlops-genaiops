@@ -152,11 +152,11 @@ version**.
 that expires: the cost window for 2026-08-16 becomes readable today, and its
 interpretation needs T030's job-active window.
 
-- [ ] T034 [US5] Read Cost Management for the 2026-08-16 window, grouped by meter. **Space retries ~20 s apart** — the API returns `429` from the client-type quota with `retry-after: 12`, and sleeping 60 s between attempts did not help on 2026-08-16. A `429` is a server response, not a client-side failure
-- [ ] T035 [US5] Compare the measured 2026-08-16 cost against T030's estimate; agreement within a **factor of 2**, the threshold fixed in [research.md § R10](./research.md) before the measurement was taken (SC-007)
-- [ ] T036 [US5] Divide the Load Balancer meter by its assumed rate and compare the implied duration against T030's job-active window plus a ~2 h tail (2–5 h) versus a full day (~24 h), per [contracts/batch-scoring.md § 6](./contracts/batch-scoring.md) (SC-013)
-- [ ] T037 [US5] Record the conclusion **with its caveat**: the rate in the denominator is an Azure list price recalled from memory, not a measured rate. State the arithmetic. If the answer is "billed at rest", update the shutdown procedure in `docs/exam-notes/compute-cost-model.md` § 6 for the rest of the project
-- [ ] T038 [US5] Update `docs/exam-notes/compute-cost-model.md` § 7 and § 7.2 with the dated outcome of both readings
+- [X] T034 [US5] Read Cost Management for the 2026-08-16 window, grouped by meter. **Space retries ~20 s apart** — the API returns `429` from the client-type quota with `retry-after: 12`, and sleeping 60 s between attempts did not help on 2026-08-16. A `429` is a server response, not a client-side failure
+- [X] T035 [US5] Compare the measured 2026-08-16 cost against T030's estimate; agreement within a **factor of 2**, the threshold fixed in [research.md § R10](./research.md) before the measurement was taken (SC-007)
+- [X] T036 [US5] Divide the Load Balancer meter by its assumed rate and compare the implied duration against T030's job-active window plus a ~2 h tail (2–5 h) versus a full day (~24 h), per [contracts/batch-scoring.md § 6](./contracts/batch-scoring.md) (SC-013)
+- [X] T037 [US5] Record the conclusion **with its caveat**: the rate in the denominator is an Azure list price recalled from memory, not a measured rate. State the arithmetic. If the answer is "billed at rest", update the shutdown procedure in `docs/exam-notes/compute-cost-model.md` § 6 for the rest of the project
+- [X] T038 [US5] Update `docs/exam-notes/compute-cost-model.md` § 7 and § 7.2 with the dated outcome of both readings
 
 ## User Story 3 — the model is registered, and the registry versions (P2)
 
