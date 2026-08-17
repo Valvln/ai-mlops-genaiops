@@ -571,3 +571,85 @@ SC-014, readable 2026-08-18.
 
 Cluster verified back at **0 nodes, `Steady`** afterwards. One batch endpoint
 exists, no online endpoint, no compute instance.
+
+### The gate ran, and the deployment failed on something else entirely (T027)
+
+PR #14 merged; the author approved the gate; run **32009142428** failed:
+
+```text
+BadRequest: Detaching Container Registry with workspace is not supported
+target: …/workspaces/ai300ml2mgou37pfmjou
+```
+
+**Not the failure the runbook predicts.** `infra/DEPLOY.md` § 5 warns that adding
+a resource type produces `AuthorizationFailed` naming a missing CI operation.
+This is upstream of that: the workspace resource itself could not be written, so
+the role assignment was never reached and the CI role was never tested.
+
+**The cause was created by this feature's own workload, an hour and a half
+earlier.** Building a custom environment made Azure ML create a container
+registry — `e733615b3ab0446b9c1093c16f42a181`, **06:23:21 UTC**, sixty-two
+seconds after the first batch endpoint invocation — and **attach it to the
+workspace**. `main.bicep` declares no registry, [research.md § R2](./research.md)
+recording that omission as deliberate. So every redeploy now asks Azure to detach
+it, and detaching is unsupported.
+
+**Two findings, and the second is the expensive one:**
+
+1. **`main.bicep` is undeployable, and reverting the grant does not fix it.** The
+   template fails on the workspace, before it reaches the role assignment. The
+   blocker is the attachment, not the change in flight. Recorded in the runbook
+   rather than in this file, because it blocks work that has nothing to do with
+   feature 005.
+2. **The project acquired its first charge that does not stop.** ACR Basic,
+   ≈0.152 €/day ≈ 4.6 €/month, billing whether or not anything is built. The
+   whole project spent 0.187 € across 15–16 August running five jobs; this costs
+   more than that per day, idle. Found on the same morning SC-013 settled that
+   the load balancer *does* stop — the two readings point opposite ways and both
+   are true.
+
+**A resource check that was correct and still insufficient.** T046 ran
+`az resource list` and found no registry. That reading was taken **before** the
+first invocation, so it was accurate — and it was accurate about a subscription
+that a later step would change. Feature 004 recorded that existence and billing
+are different ledgers; this adds that *when* you look is part of what you looked
+at.
+
+**Decision deferred to the author**, deliberately. Declaring the registry in the
+template restores deployability and accepts ≈4.6 €/month indefinitely; removing
+it is unsupported and risks a workspace pointing at a deleted resource, with the
+90-day Key Vault lock behind any recreation. Neither is a call to make while
+finishing a task list. The options are tabulated in `infra/DEPLOY.md` § 5.
+
+### Phase 2 close-out — what is done and what is not
+
+| | State |
+| --- | --- |
+| SC-007 cost within a factor of 2 | ✅ 1.11× |
+| SC-009 registered with a version and a run reference | ✅ |
+| SC-010 the registry versions | ✅ |
+| SC-011 endpoint returns verified predictions | ❌ **not achieved** — blocked behind the grant, which is blocked behind the registry |
+| SC-012 nothing left holding compute | ✅ cluster 0 nodes; batch endpoint idle; no online endpoint |
+| SC-013 load balancer at rest | ✅ it is free at rest, by a factor of 19 |
+| SC-014 measured cost of 2026-08-17 | ⏸ **deferred to 2026-08-18**, and it now has a second thing to look for: a `Container Registry` meter |
+
+**Prediction scorecard — final**
+
+| Prediction | Outcome |
+| --- | --- |
+| R1 workspace injects the tracking URI | ✅ |
+| R2 curated environment has mlflow | ⚠️ yes, but at 3.x — the version was the load-bearing detail, and its omission from the prediction cost the whole no-code path |
+| R3 no refusal for tracking and artifacts | ✅ at low confidence, and right |
+| R4 identical predictions across platforms | ✅ exactly, all 500 |
+| R5 dataset regenerates byte for byte | ✅ |
+| R6 local pin matches the image's scikit-learn | ✅ |
+| R7 endpoint as workload, not Bicep | ✅ for the endpoint — but the *environment* it needed attached a resource to the subscription, which the reasoning did not anticipate |
+| R8 no-code deployment, no scoring script | ❌ **contradicted** — unavailable on this platform |
+| R9 the endpoint's identity needs a grant | ❌ **contradicted on its subject** — the endpoint has no identity; the cluster's performs the read |
+| R10 cost within a factor of 2 | ✅ 1.11× |
+| R11 load balancer billed only while warm | ⚠️ direction right, magnitude wrong — 1.25 h against a predicted 2–5 h |
+
+Seven confirmed, two contradicted, two right in direction and wrong in detail.
+The two contradictions are worth more than the seven: R8 removed an architecture
+decision, and R9 is the second time in two features that this project has named
+the wrong principal.
