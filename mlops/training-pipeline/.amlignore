@@ -1,0 +1,37 @@
+# Excluded from the job's code snapshot.
+#
+# `code: .` uploads this directory. Without this file the snapshot would carry
+# the local virtual environment (hundreds of MB), the dataset (which arrives
+# through the data store, and shipping a second copy in the snapshot would let
+# the job read the wrong one), and baseline.json (whose whole value is being
+# computed independently of the job — a job that could see it is a job that
+# could be accused of having used it).
+#
+# Azure ML falls back to .gitignore when this file is absent, and the repository
+# .gitignore lives at the root, outside the snapshot directory. So this file is
+# not a convenience.
+
+.venv/
+__pycache__/
+*.pyc
+
+data/
+baseline.json
+
+# Local copies of the model. The deployment gets the model from the REGISTRY,
+# by version - shipping a copy in the code snapshot would put a second, unnamed
+# candidate on the node and make "which model answered" a question rather than
+# a fact.
+downloaded-model/
+registered-model/
+serving-model/
+
+# Scoring input arrives through the data store, like the training data.
+scoring-input/
+
+# MLflow's local fallback store, if a local run ever created one.
+mlruns/
+
+README.md
+pyproject.toml
+uv.lock

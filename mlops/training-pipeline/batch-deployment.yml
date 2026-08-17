@@ -1,0 +1,67 @@
+$schema: https://azuremlschemas.azureedge.net/latest/batchDeployment.schema.json
+
+# The deployment: what the endpoint actually runs.
+#
+# Create with:
+#   az ml batch-deployment create -g rg-ai300-test01 -w ai300ml2mgou37pfmjou \
+#     -f mlops/training-pipeline/batch-deployment.yml --set-default
+
+name: dt-scored
+endpoint_name: ai300-batch-dt
+
+# Pinned to a version EXPLICITLY, never `latest`. `latest` would make what this
+# endpoint serves a function of when it happens to be invoked, and the
+# comparison in T052 is against predictions computed from a specific version -
+# so a moving target would turn a real disagreement into an unfalsifiable one.
+#
+# Version 1 is the run-linked record: it carries `job_name`, tying what is
+# served back to the job that trained it. Version 3 exists only because a first
+# attempt tried to fix the no-code build by pinning pip; that pin worked and
+# revealed the real conflict, which no pin can fix. With the environment named
+# below, nothing is synthesised from the model's conda.yaml, so the pip pin is
+# irrelevant and version 1 is deployable as registered.
+model: azureml:ai300-decision-tree:1
+
+# The same cluster the training job used. A batch deployment does not hold
+# nodes: it names a cluster to borrow one from when a scoring job runs.
+compute: azureml:ai300-cpu-cluster
+
+resources:
+  instance_count: 1
+
+# A scoring script, which research.md R8 deliberately set out to avoid.
+#
+# The no-code path is unavailable here, and not through misconfiguration: Azure
+# ML synthesises the serving environment from the model's conda.yaml and adds
+# `azureml-dataset-runtime`, which caps pyarrow below 4.0.0, while MLflow 3
+# requires 4.0.0 or later. Empty intersection, every published version, so the
+# image build fails before a node is allocated. scoring.py carries the evidence.
+code_configuration:
+  code: .
+  scoring_script: scoring.py
+
+# Named explicitly, and this is what removes the synthesis step - Azure ML no
+# longer builds an environment from the model's conda.yaml, so the conflict that
+# defeated the no-code path never arises.
+#
+# Built by scoring-env.yml / scoring-conda.yml, which pin the library versions
+# the training job's ENV-PROBE reported. That pinning is what makes the pickle
+# loadable: the estimator is unpickled by the same versions that pickled it.
+# The registry-scoped curated environment cannot be used here - batch
+# deployments reject a registry environment id, and sklearn-1.5:52 is a
+# build-context environment tagged `Training` with no referenceable image.
+environment: azureml:ai300-batch-scoring:4
+
+mini_batch_size: 10
+output_action: append_row
+output_file_name: predictions.csv
+
+# error_threshold -1 means no failure tolerance: any failed mini-batch fails the
+# job. The default swallows a proportion of failures, which would let a partial
+# result look like a complete one.
+error_threshold: -1
+logging_level: info
+
+retry_settings:
+  max_retries: 2
+  timeout: 300

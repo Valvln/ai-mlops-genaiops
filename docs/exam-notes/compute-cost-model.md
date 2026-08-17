@@ -433,11 +433,11 @@ Listed so that none of it is later remembered as fact.
 
 | Claim | Status | How to settle it |
 | --- | --- | --- |
-| A cluster resting at `min_nodes: 0` incurs no load balancer charge | **still unverified as a charge, but narrowed** — see § 7.1 | Read Cost Management for a full day at rest, 2026-08-16 or later |
-| The load balancer figure in EUR | **unconverted** — Microsoft states ≈ 0.33 USD/day; no matching meter was found in the retail API for `northeurope` | Read the actual meter in Cost Management once a compute instance exists |
+| ~~A cluster resting at `min_nodes: 0` incurs no load balancer charge~~ | ✅ **settled 2026-08-17.** It does not. The balancer is billed only while the cluster is warm, plus a tail under an hour. See § 7.3 | — |
+| ~~The load balancer figure in EUR~~ | ✅ **measured 2026-08-16.** Two meters, `Load Balancer · Standard Included LB Rules and Outbound Rules` and `Load Balancer · Standard Data Processed`, plus `Virtual Network · Standard IPv4 Static Public IP`. See § 7.2 | — |
 | Whether trial credit remains on this subscription | **unverifiable from these APIs** | Portal → Cost Management → Credits |
 | ~~Whether a budget alert exists~~ | ✅ **confirmed 2026-08-15** by the author, in the portal, before the first hourly resource was created. The CLI still cannot see it; that remains a limitation of `az consumption budget list`, not evidence about the budget | — |
-| Node-hours are billed from allocation (image pull, provisioning) rather than from script start | **unverified** | Run one short job, compare job duration against the billed node time |
+| ~~Node-hours are billed from allocation (image pull, provisioning) rather than from script start~~ | ✅ **confirmed 2026-08-16.** Billed 25.0 min against 12.6 min of script time across three jobs — 1.98×. See § 7.2 | — |
 | Managed online endpoint quota | **not exposed** — `az ml compute list-usage` shows no online-endpoint bucket, so the allocatable instance count for a deployment is unknown until one is attempted | Attempt the Week 2 deployment; an `OutOfQuota` error names the real limit |
 | The two non-zero Azure ML surcharge meters (GPU, PB) apply to v2 workloads | **unverified**, and out of scope — no GPU exercise is planned | — |
 
@@ -491,6 +491,161 @@ on the same day as the spend. Cost Management had no 2026-08-15 figures hours
 after the jobs completed. Any verification of a day's spend is a next-day
 activity — which is a scheduling fact worth having written down, since feature
 004's task list got it wrong.
+
+### 7.2 What the measured bill settled — read 2026-08-16, for 2026-08-15
+
+**The headline: the VM meter is 26% of the cost of running a job on this
+cluster.** Everything this note priced before today was that 26%.
+
+Three jobs, 12 min 38 s of total script time, on one `Standard_DS1_v2` node.
+Estimated from § 3 at **< 0.02 €**. Actually billed **0.0912 €**.
+
+| Meter | € | Share |
+| --- | --- | --- |
+| Load Balancer · Standard Included LB Rules and Outbound Rules | 0.043925 | 48% |
+| Virtual Machines · D1 v2/DS1 v2 | 0.024089 | **26%** |
+| Storage · P10 LRS Disk | 0.011014 | 12% |
+| Virtual Network · Standard IPv4 Static Public IP | 0.008785 | 10% |
+| Load Balancer · Standard Data Processed | 0.001620 | 2% |
+| Storage · write / read / list operations | 0.002085 | 2% |
+| **Total** | **0.091197** | |
+
+Idle days on either side read **0.000026 €**, so essentially all of it is the
+cluster.
+
+**A load balancer is billed for a resource that does not appear in the resource
+group.** § 7.1 checked `az resource list` for `Microsoft.Network/*`, found
+nothing, and concluded a load-balancer charge was unlikely. The resource check
+was right and is still right — re-verified 2026-08-16, still empty — and the
+conclusion drawn from it was wrong. The networking sits in a Microsoft-managed
+resource group and bills to this one.
+
+> **Existence and billing are different ledgers.** § 7.1 wrote that sentence
+> and then reasoned past it. Whether a resource is *visible* in the resource
+> group says nothing about whether a meter for it lands on the invoice.
+
+**But the load balancer is torn down, not permanent.** Dividing each meter by
+its list rate gives a billed duration — the VM rate is measured (§ 3), the LB
+and IP rates are Azure list prices from memory, so those two are **inferences
+with an assumed rate**:
+
+| Meter | assumed rate | implied duration |
+| --- | --- | --- |
+| VM `D1 v2/DS1 v2` | 0.05774 €/h *(measured)* | 25.0 min |
+| LB rules | ≈0.021 €/h | ≈2.1 h |
+| Static public IP | ≈0.0042 €/h | ≈2.1 h |
+
+The LB and IP agree at ≈2.1 h. The cluster was created 16:38 UTC and the last
+node was gone by ≈17:25; 2.1 h reaches ≈18:44, against 7.4 h left in the UTC
+day. **The load balancer outlived the nodes by ≈1.5 h and was then removed.**
+That is the strongest evidence yet that a cluster at rest is free — but it is
+not the full-day reading, so § 4.1's guarantee still awaits 2026-08-17.
+
+**Node-hours are billed from allocation.** Settled, and against script start:
+
+| Measure | total |
+| --- | --- |
+| Script execution | 12 min 38 s |
+| Submission → end | 21 min 09 s |
+| Submission → end + 3 × 120 s idle | 27 min 09 s |
+| **Billed node time** | **25 min 02 s** |
+
+Provisioning and image pull (≈2 min 50 s per job) are billed, and so is the
+120-second idle tail. **A short job costs about twice its script time.** Fewer,
+longer jobs are materially cheaper than many short ones.
+
+### The planning rate that replaces § 3 for cluster jobs
+
+§ 3's 0.05774 €/node-hour is the VM meter and is correct as such. For budgeting
+a job, split by how the meters actually scale:
+
+| Component | Rate | Scales with |
+| --- | --- | --- |
+| VM + P10 OS disk | **≈0.082 €/node-hour** | allocated node time, incl. provisioning and idle tail |
+| LB rules + public IP | **≈0.025 €/hour** | how long the cluster stays warm (≈2 h tail) |
+
+Do not blend these into one per-node-hour figure: the load balancer does not
+scale with node count or node time. For a short job it dominates; for a long one
+it is noise.
+
+> **Superseded 2026-08-17 by § 7.3.** Both rows survive a second measurement, but
+> both are wrong in a way that matters for short jobs: the disk does not bill for
+> the same duration as the VM, and a third term — data processed through the
+> balancer — is missing entirely. Use § 7.3's table.
+
+### 7.3 What a full day settled — read 2026-08-17, for 2026-08-16
+
+Feature 005 ran two training jobs on 2026-08-16, within a single job-active
+window of **16:18:45 → 16:41:47 UTC (0.38 h)**. Nothing else ran that day.
+
+| Meter | 15/08 € | 16/08 € |
+| --- | --- | --- |
+| Load Balancer · Standard Included LB Rules and Outbound Rules | 0.043925 | 0.026291 |
+| Storage · P10 LRS Disk | 0.011014 | **0.025422** |
+| Load Balancer · Standard Data Processed | 0.001620 | **0.021668** |
+| Virtual Machines · D1 v2/DS1 v2 | 0.024089 | 0.016381 |
+| Virtual Network · Standard IPv4 Static Public IP | 0.008785 | 0.005258 |
+| Storage · operations | 0.002085 | 0.001297 |
+| **Total** | **0.091197** | **0.096347** |
+
+**A cluster at `min_nodes: 0` is free at rest. Settled.** § 4.1 and § 7.1 left
+this open through two readings; this is the one that closes it.
+
+The binary form of the test — *is there a load-balancer row?* — was destroyed in
+advance by running jobs on the day under observation. It was replaced with a
+quantitative one before the reading was taken, which is why the contaminated day
+could still answer the question:
+
+| | LB implied | IP implied |
+| --- | --- | --- |
+| 15/08 | 2.09 h | 2.09 h |
+| 16/08 | **1.25 h** | **1.25 h** |
+
+at ≈0.021 €/h for the rules and ≈0.0042 €/h for the static IP. Against a
+job-active window of 0.38 h, that is a tail of **≈52 minutes** — and against the
+"billed at rest" hypothesis of ≈24 h, it is short by a factor of **19**.
+
+**Why this survives the rates being recalled rather than measured.** For the
+resting hypothesis to hold, the LB rate would have to be 19× lower *and* the
+public IP rate would have to be wrong by the same factor — because the two
+meters, priced from separately recalled numbers, agree on the implied duration to
+two decimal places on both days. Two independent rates do not land on the same
+wrong answer twice.
+
+A second, rate-free argument reaches the same place: both days have 24 hours in
+them, and the balancer billed 1.67× more on one than the other. A charge incurred
+at rest cannot vary with what was done, because nothing was being done.
+
+**The OS disk outlives the node, and on a short job it costs more than the VM.**
+
+| | disk / VM | Implied disk lifetime | Node time |
+| --- | --- | --- | --- |
+| 15/08, three jobs | 0.46 | ≈0.41 h | ≈0.42 h |
+| 16/08, two jobs | **1.55** | ≈0.94 h | ≈0.33 h |
+
+The P10 disk is created before the node is usable and released after it is gone,
+so the overhead is **per activation** and does not shrink when the script does.
+This is a second, independent reason to prefer fewer longer jobs — the first
+being that provisioning is billed. Two short activations pay the disk overhead
+twice.
+
+**`Standard Data Processed` scales with what the job pulls.** It rose 13×
+(0.001620 → 0.021668 €) on a day when the balancer's own hours *fell*, because
+the jobs pulled the `sklearn-1.5` curated image and pushed model artifacts back,
+twice. At 22.5% of the day it is not a rounding term.
+
+### The planning rate that replaces the table above
+
+| Component | Rate | Scales with |
+| --- | --- | --- |
+| VM `D1 v2/DS1 v2` | ≈0.0577 €/node-hour | allocated node time, incl. provisioning and idle tail |
+| P10 OS disk | ≈0.027 €/hour, **≈0.9 h per activation** | the *activation*, not the node's lifetime |
+| LB rules + public IP | ≈0.025 €/hour | cluster-warm window **+ ≈1 h tail** |
+| LB data processed | **≈0.01 € per job that pulls a curated image** | bytes crossing the balancer, not time |
+
+Rule of thumb for one short job on this cluster, from a cold start:
+**≈0.05 €.** Each additional job inside the same warm window adds ≈0.02 €;
+each job that re-warms the cluster from cold adds ≈0.05 €.
 
 ---
 

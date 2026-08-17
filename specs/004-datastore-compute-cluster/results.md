@@ -328,6 +328,141 @@ have reached Azure. This one did.
 
 ---
 
+## SC-008 settled — 2026-08-16, and the load-balancer prediction was wrong
+
+**Passed on the threshold, failed on the estimate, and the meter breakdown
+overturns a prediction this file recorded yesterday.**
+
+The reading was taken the next day, as the deferral required. Same Cost
+Management query API, window 2026-08-13 → 2026-08-16, grouped by service and
+then re-run grouped by meter.
+
+### The daily totals
+
+| Day | Services with any cost | Total |
+| --- | --- | --- |
+| 2026-08-13 | Storage | 0.0000264 € |
+| 2026-08-14 | Storage | 0.0000264 € |
+| **2026-08-15** | **Bandwidth, Load Balancer, Storage, Virtual Machines, Virtual Network** | **0.0912 €** |
+| 2026-08-16 (partial) | Storage | 0.0000268 € |
+
+**SC-008 passes**: 0.0912 € against a threshold of 1 €, with two idle days on
+either side of it reading at 0.000026 €. Nothing is left running — the 16/08
+row is back at the idle-day figure.
+
+### The estimate was wrong by 4.6×, and the reason is the interesting part
+
+This file predicted **< 0.02 €** from the rate card: three short jobs on one
+`DS1_v2` node at 0.05774 €/node-hour. The measured figure is **0.0912 €**.
+
+The estimate priced the VM. The VM is a quarter of the bill:
+
+| Meter | € on 15/08 | Share |
+| --- | --- | --- |
+| Load Balancer · Standard Included LB Rules and Outbound Rules | 0.043925 | 48% |
+| Virtual Machines · D1 v2/DS1 v2 | 0.024089 | 26% |
+| Storage · P10 LRS Disk | 0.011014 | 12% |
+| Virtual Network · Standard IPv4 Static Public IP | 0.008785 | 10% |
+| Load Balancer · Standard Data Processed | 0.001620 | 2% |
+| Storage · write / read / list operations | 0.002085 | 2% |
+| Bandwidth · intra-continent egress | 0.00000005 | 0% |
+
+**The single largest line item is a load balancer that this file predicted would
+not be billed at all.**
+
+### The prediction, and how it failed
+
+The entry above — *"The Batch networking resources are not in this resource group
+at all"* — reasoned to this conclusion:
+
+> a load balancer that does not exist in this resource group cannot produce a
+> charge attributable to it. That makes "no load-balancer charge for this
+> cluster" the likely answer
+
+The observation it rested on is still true. Re-checked today:
+`az resource list -g rg-ai300-test01 --query "[?contains(type,'Network')]"`
+returns **empty**, as it did at zero nodes and with a node running.
+
+The inference drawn from it is false. **A load balancer and a static public IP
+were billed to this resource group on 15/08 while no `Microsoft.Network/*`
+resource has ever been visible in it.** The resource lives in a
+Microsoft-managed resource group; the charge lands here.
+
+That is the same trap the quota reading sprang yesterday, in the same feature,
+pointing the other way: *existence and billing are different ledgers* was
+written down as a caveat and then reasoned past anyway. The caveat was correct
+and the sentence after it was not.
+
+### What the meter durations say about the load balancer's lifetime
+
+Dividing each meter by its list rate gives a billed duration. **The VM rate is
+this repository's own measured figure; the LB and IP rates are Azure list prices
+taken from memory, so these two durations are inferences with an assumed rate,
+not measurements.**
+
+| Meter | € | assumed rate | implied duration |
+| --- | --- | --- | --- |
+| VM `D1 v2/DS1 v2` | 0.024089 | 0.05774 €/h *(repo-measured)* | **25.0 min** |
+| LB rules | 0.043925 | ≈0.021 €/h | ≈2.1 h |
+| Static public IP | 0.008785 | ≈0.0042 €/h | ≈2.1 h |
+
+The LB and the IP agree with each other at ≈2.1 h, which is mild corroboration
+that the assumed rates are near enough.
+
+The cluster was created at 16:38:39 UTC and the last node was gone by ≈17:25
+UTC. **2.1 h from cluster creation lands at ≈18:44 UTC — well short of the 7.4 h
+remaining in the UTC day.** So the load balancer outlived the nodes by roughly
+an hour and a half and was then **torn down**. It is not a permanent fixture of
+the cluster.
+
+**Consequence for the 17/08 reading (T027).** It now has stronger evidence
+pointing at "a cluster at rest bills nothing" than the resource-absence argument
+ever gave it — the LB was demonstrably removed, and today's partial 16/08 row
+shows Storage only. But partial-day cost data is not a full-day reading, and
+this file has now been wrong once about exactly this meter. **T027 still runs.**
+
+### Node-hours are billed from allocation, not from script start
+
+The § 7 row in the cost model is settled, and it settles against script start.
+
+| Job | submitted | script start | end |
+| --- | --- | --- | --- |
+| `modest_chayote_c3437h2z1f` | 16:44:40 | 16:47:36 | 16:52:09 |
+| `stoic_zoo_rrf7805s9q` | 17:00:09 | 17:03:07 | 17:07:04 |
+| `willing_vinegar_s7pkrrjkvs` | 17:13:49 | 17:16:26 | 17:20:34 |
+
+| Measure | total |
+| --- | --- |
+| Script execution (`start` → `end`) | 12 min 38 s |
+| Submission → end (`created` → `end`) | 21 min 09 s |
+| Submission → end + 3 × 120 s idle window | 27 min 09 s |
+| **Billed node time** (0.024089 € ÷ 0.05774) | **25 min 02 s** |
+
+Billed time is **1.98× the script time**, and sits between submit→end and
+submit→end-plus-idle. The ~2 min 50 s per job of provisioning and image pull is
+billed, and so is the 120-second idle tail. The three gaps between jobs all
+exceeded 120 s, so each job paid its own allocation cycle.
+
+**The rule worth keeping: on a scale-to-zero cluster, a short job costs about
+twice its script time.** Batching work into fewer, longer jobs is materially
+cheaper than many short ones — which is a design constraint on feature 005, not
+a curiosity.
+
+### The planning rate this replaces
+
+Costing a job at 0.05774 €/node-hour understates it. Split by how each meter
+scales:
+
+- **per node-hour**: VM 0.05774 + P10 disk ≈0.0246 → **≈0.082 €/node-hour**
+- **per cluster-active window** (LB rules + public IP, ≈2 h tail after the last
+  node): **≈0.025 €/hour of active window**
+
+Quoting one blended per-node-hour figure would be wrong, because the LB and IP
+do not scale with node count or node time — they scale with how long the cluster
+stays warm.
+
+---
+
 ## The necessity test — the grant is load-bearing
 
 **This is the result the feature was most at risk of getting wrong, and it came
@@ -428,9 +563,9 @@ labelled with the evidence for its label:
 | Does vCPU quota track allocated nodes | Re-read during the job | ✅ yes: 0 → 1 → 0 |
 | Is the container grant load-bearing or inert | The necessity test | ✅ **load-bearing**, proven both ways |
 | Can CI deploy this template, and at what cost in operations | Phase 4, needs the author to push and approve | ❌ **not started** |
-| Does a cluster at zero nodes bill a load balancer | Cost reading over a full day, T027 | ⏸ next session |
-| What this feature actually cost | Two-window cost comparison, T028 | ⏸ next session — data lags a day |
-| Are node-hours billed from allocation or from script start | Compare the three jobs' durations against billed node time | ⏸ next session, and now cheap |
+| Does a cluster at zero nodes bill a load balancer | Cost reading over a full day, T027 | ⏸ **still open**, but the meter now exists and the LB is billed *while active* — see the 16/08 entry |
+| What this feature actually cost | Two-window cost comparison, T028 | ✅ **0.0912 €** on 16/08 — 4.6× the estimate, because the estimate priced only the VM |
+| Are node-hours billed from allocation or from script start | Compare the three jobs' durations against billed node time | ✅ **from allocation** — billed 25.0 min against 12.6 min of script time |
 
 ## Final state of the environment
 
@@ -464,12 +599,13 @@ Read at the end of the session, after the third job scaled down:
 | SC-005 size within family and regional quota | ✅ measured on both sides |
 | SC-006 role operations traced to failing runs | ✅ 5 added, 5 with run ids, 0 unaccounted |
 | SC-007 boundary probes still refuse | ✅ `The four refusals: success` |
-| SC-008 cost under 1 €, two windows | ⏸ data lags a day |
+| SC-008 cost under 1 €, two windows | ✅ **0.0912 €** vs 0.000026 € idle days, read 16/08 |
 | SC-009 both observations recorded with dates | ✅ |
 | SC-010 nothing left running | ✅ |
 
-**Nine of ten settled.** The one outstanding — SC-008 — is deferred because the
-cost data does not exist yet, not because the work was skipped.
+**Ten of ten settled**, once the 16/08 reading landed. SC-008 was deferred
+because the cost data did not exist yet, not because the work was skipped, and
+it closed on the first day it could be read.
 
 ## Phase 4 — the CI authority loop
 

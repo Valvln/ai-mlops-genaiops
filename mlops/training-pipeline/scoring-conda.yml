@@ -1,0 +1,47 @@
+name: ai300-batch-scoring
+channels:
+  - conda-forge
+dependencies:
+  # Matches the training job's reported interpreter exactly.
+  - python=3.10
+  # pip<24.1 is required, not preferred: several azureml-* wheels publish
+  # metadata with `pyarrow (>=0.15.*)`, a syntax pip 24.1 and later reject as
+  # invalid. With a newer pip every candidate version is discarded and
+  # resolution fails before any real conflict is reached. The build log for job
+  # batchjob-c770a812 says so in as many words.
+  - pip<24.1
+  - pip:
+      # azureml-dataset-runtime is DELIBERATELY ABSENT, although the older batch
+      # documentation names it as a requirement. Its dependency chain is
+      # unresolvable for Python 3.10 in both directions, established by three
+      # builds:
+      #
+      #   unpinned  -> pip finds 1.44.0, backtracks to 1.43.0.post2, which wants
+      #               pyarrow<4.0.0; no pyarrow 3 wheel exists for cp310, so it
+      #               builds from source, and its own build dependencies demand
+      #               numpy==1.19.4, which fails to compile against Python 3.10's
+      #               changed _Py_HashDouble signature. Three levels between the
+      #               reported error and its cause.
+      #   >=1.44    -> azureml-dataprep 4.2.x requires
+      #               azureml-dataprep-rslex~=2.8.0dev0, which is not available.
+      #
+      # It is the v1-SDK FUSE mounting package and scoring.py does not import it.
+      # If the batch runtime turns out to need it, the invocation says so by name
+      # - which is a cheaper way to find out than another hour of resolver
+      # archaeology.
+      - azureml-core
+      # Pinned to the versions the training job's ENV-PROBE reported, because
+      # these two are what the pickle's compatibility actually rests on: the
+      # estimator class layout comes from scikit-learn and the pickling protocol
+      # from cloudpickle.
+      - scikit-learn==1.5.2
+      - cloudpickle==3.1.2
+      # numpy and pandas are deliberately NOT pinned to the training versions
+      # (1.22.4 / 1.5.3), and that is an evidence-based relaxation rather than a
+      # convenience. The same model.pkl was loaded locally under numpy 1.26.4
+      # and pandas 2.3.3 - twice, on two days - and reproduced the prediction
+      # vector exactly. Pinning 1.22.4 here failed the build outright: pip could
+      # not obtain a wheel and the source build fails against Python 3.10's
+      # changed `_Py_HashDouble` signature.
+      - "numpy<2"
+      - "pandas<3"

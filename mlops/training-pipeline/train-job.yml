@@ -1,0 +1,64 @@
+$schema: https://azuremlschemas.azureedge.net/latest/commandJob.schema.json
+
+# The training job for feature 005. Trains a decision tree on data read through
+# the credential-less data store, tracks parameters and metrics with MLflow, and
+# logs the fitted model in MLflow format.
+#
+# ONE submission does all of it. Billing runs from node ALLOCATION rather than
+# from script start, so splitting the probe, the training and the logging across
+# separate jobs would multiply the cost of the answer without improving it.
+#
+# Submit with:
+#   az ml job create -g rg-ai300-test01 -w ai300ml2mgou37pfmjou \
+#     -f mlops/training-pipeline/train-job.yml --stream
+
+display_name: train-decision-tree
+description: >-
+  Fits DecisionTreeClassifier(max_depth=4, random_state=42) on the synthetic
+  training set, tracks params and metrics to MLflow, and logs the model in
+  MLflow format for Phase 2's no-code batch deployment. Probes and asserts the
+  resolved tracking URI before training anything.
+experiment_name: ai300-training-pipeline
+
+code: .
+
+# The expected digest is passed IN, so a mismatch fails the job rather than
+# being discovered afterwards by a human comparing two strings. Recorded at
+# T005: this is the file baseline.json was computed on.
+command: >-
+  python train.py
+  --input ${{inputs.training_data}}
+  --expected-sha256 9130b02593b6ce3fe84bbef7543b9397b96e05e36d131afa4b8daaf84bb60384
+
+# Curated environment pinned to an observed version rather than to `latest`.
+# Version 52 was confirmed to still be the latest on 2026-08-16, so feature
+# 004's pin remains current. Reports Ubuntu 20.04 / Python 3.10 /
+# scikit-learn 1.5, which pyproject.toml mirrors locally.
+environment: azureml://registries/azureml/environments/sklearn-1.5/versions/52
+
+inputs:
+  training_data:
+    # uri_file, not uri_folder: the script expects one named file, and the
+    # narrower type makes a wrong path fail at mount time rather than inside
+    # the script — a failure that costs a node-minute instead of a job.
+    type: uri_file
+    # Addressed through the DATA STORE, not through a storage URL. This is what
+    # makes the read a test of the data store built in feature 004.
+    path: azureml://datastores/ai300_training_data/paths/training.csv
+    mode: ro_mount
+
+compute: azureml:ai300-cpu-cluster
+
+# `managed` selects the compute cluster's own system-assigned identity, which is
+# the principal main.bicep grants Storage Blob Data Reader on the training-data
+# container. Feature 004 established that the grant which matters is the one
+# held by the identity that actually performs the operation.
+#
+# That grant is read-only and scoped to the training-data container, while the
+# run record and the model artifact are written to the workspace's DEFAULT
+# store. research.md R3 predicts this will not fail — the run infrastructure
+# writes those with the run's own token — at deliberately low confidence. If a
+# refusal arrives it is discovered here, and exactly the operation it names gets
+# granted. Never a built-in role.
+identity:
+  type: managed

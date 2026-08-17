@@ -338,6 +338,55 @@ resource clusterContainerReadGrant 'Microsoft.Authorization/roleAssignments@2022
   }
 }
 
+// --- Reading the model back, to serve it (feature 005) -----------------------
+//
+// DISCOVERED BY FAILING, per the rule this repository follows. Provenance:
+// batch scoring job batchjob-3e916806-8bbf-4212-8827-61d4adbaa566, child run
+// 76ee2430-adfd-4f82-b070-4aa99d364535, 2026-08-17. It failed with:
+//
+//   ScriptExecution.StreamAccess.Authentication
+//   PermissionDenied - "This request is not authorized to perform this
+//   operation using this permission."
+//   URI: .../datastores/workspaceartifactstore/paths/
+//        ExperimentRun/dcid.placid_knot_z03v76ysql/model/
+//
+// The refusal names a read, on the workspace artifact container, and nothing
+// else. That is what is granted here.
+//
+// THE PRINCIPAL IS THE CLUSTER'S, AND THAT WAS NOT THE PREDICTION.
+// research.md R9 expected the batch ENDPOINT's identity to be the one needing
+// access. The endpoint has no identity at all - ARM reports `identity: null`,
+// authMode AADToken - and the model mount is performed on the compute node, so
+// it runs as the cluster's system-assigned identity: the same principal, and
+// the same lesson, as feature 004.
+//
+// THIS REVERSES A BOUNDARY THE GRANT ABOVE WAS SCOPED TO KEEP.
+// clusterContainerReadGrant is deliberately scoped to the training container,
+// and its comment states the reason as keeping the cluster out of the
+// workspace's own containers. Serving a model that lives in the workspace's own
+// container cannot be done while that holds. The boundary is moved knowingly,
+// and only in the read direction: no write, and no account-wide scope.
+resource workspaceArtifactContainer 'Microsoft.Storage/storageAccounts/blobServices/containers@2023-01-01' existing = {
+  parent: blobService
+  // The container behind the `workspaceartifactstore` datastore. Read from the
+  // failing job's own URI rather than assumed - and confirmed by listing the
+  // model's blobs under it.
+  name: 'azureml'
+}
+
+resource clusterArtifactReadGrant 'Microsoft.Authorization/roleAssignments@2022-04-01' = {
+  scope: workspaceArtifactContainer
+  name: guid(workspaceArtifactContainer.id, cpuCluster.id, storageBlobDataReaderRoleId)
+  properties: {
+    // Reader, not Contributor. The refusal was on a read; a write has not been
+    // refused and is therefore not granted. If the scoring output turns out to
+    // need one, that will arrive as its own refusal naming its own scope.
+    roleDefinitionId: storageBlobDataReaderRoleId
+    principalId: cpuCluster.identity.principalId
+    principalType: 'ServicePrincipal'
+  }
+}
+
 output storageAccountName string = storageAccount.name
 output keyVaultUri string = kv.properties.vaultUri
 output workspaceName string = mlWorkspace.name
