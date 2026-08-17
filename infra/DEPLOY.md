@@ -715,6 +715,57 @@ Administrator`, would end the interruption and also end the property the
 narrowness exists for — probe P4 would begin to succeed, and the boundary job
 would go red for a good reason.
 
+### 🚨 `main.bicep` is currently NOT DEPLOYABLE — 2026-08-17
+
+**Read this before starting any infrastructure work.** The blocker is not in the
+template's own text and will not be found by reading it.
+
+Run `32009142428` failed the approval gate's deployment with:
+
+```text
+BadRequest: Detaching Container Registry with workspace is not supported
+target: …/workspaces/ai300ml2mgou37pfmjou
+```
+
+**What happened.** Building a *custom* Azure ML environment causes Azure ML to
+create a container registry and **attach it to the workspace**. Ours,
+`e733615b3ab0446b9c1093c16f42a181`, was created at **06:23:21 UTC on
+2026-08-17** — sixty-two seconds after the first batch endpoint invocation, by
+that invocation's image build. Nobody asked for it.
+
+`main.bicep` declares no `containerRegistry`, and feature 005's research records
+that omission as deliberate: no registry was wanted, so none was declared. That
+now means every redeployment of the template asks Azure to *detach* the registry
+the workspace has acquired, and Azure refuses. **The failure is independent of
+whatever change is being deployed** — reverting the change that happened to be in
+flight does not restore deployability.
+
+**Two things follow, and neither is optional to know:**
+
+1. **A container registry bills at rest.** Basic tier, northeurope,
+   ≈0.152 €/day ≈ **4.6 €/month**, accruing whether or not anything is built. It
+   is the first charge in this project that does not stop when the compute stops
+   — and it appeared on the same morning the load-balancer-at-rest question was
+   settled in the other direction. § 4 of this runbook and § 7.4 of the cost
+   model carry the figure.
+2. **Custom environments are not free in the way curated ones are.** A curated
+   environment is pulled from Microsoft's registry and attaches nothing. The
+   moment a workload needs an environment built from a conda specification, the
+   subscription acquires a permanent resource and the IaC drifts from reality.
+   Prefer curated environments; when one will not do, expect this.
+
+**Deciding what to do is open, and it is the author's call**, because both
+directions have a cost:
+
+| Option | Consequence |
+| --- | --- |
+| Declare the existing registry in `main.bicep` | Deployability returns. ≈4.6 €/month accepted indefinitely. The template carries an auto-generated name, which is a runtime value in a declarative file |
+| Remove the registry | Detaching is unsupported, so the workspace would reference a deleted resource. Recreating the workspace collides with the 90-day Key Vault name lock (§ 6). **Not attempted** |
+| Leave it | No new cost decision, and no infrastructure deployment is possible until it is resolved |
+
+Until this is resolved, treat `infra/**` as frozen: a push to `main` touching it
+will queue a gate whose deployment cannot succeed.
+
 ### Reading a red run correctly
 
 | Red job | Meaning |

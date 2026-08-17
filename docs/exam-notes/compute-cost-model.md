@@ -439,6 +439,7 @@ Listed so that none of it is later remembered as fact.
 | ~~Whether a budget alert exists~~ | ✅ **confirmed 2026-08-15** by the author, in the portal, before the first hourly resource was created. The CLI still cannot see it; that remains a limitation of `az consumption budget list`, not evidence about the budget | — |
 | ~~Node-hours are billed from allocation (image pull, provisioning) rather than from script start~~ | ✅ **confirmed 2026-08-16.** Billed 25.0 min against 12.6 min of script time across three jobs — 1.98×. See § 7.2 | — |
 | Managed online endpoint quota | **not exposed** — `az ml compute list-usage` shows no online-endpoint bucket, so the allocatable instance count for a deployment is unknown until one is attempted | Attempt the Week 2 deployment; an `OutOfQuota` error names the real limit |
+| The container registry's measured daily rate | **estimated, not measured** — 0.152 €/day is a list price. It appeared 2026-08-17 and the first day that can show it is 2026-08-18. See § 7.4 | Read Cost Management for 2026-08-17 on 2026-08-18 or later; look for a `Container Registry` meter |
 | The two non-zero Azure ML surcharge meters (GPU, PB) apply to v2 workloads | **unverified**, and out of scope — no GPU exercise is planned | — |
 
 ### 7.1 What the first real cluster settled — 2026-08-15
@@ -646,6 +647,37 @@ twice. At 22.5% of the day it is not a rounding term.
 Rule of thumb for one short job on this cluster, from a cold start:
 **≈0.05 €.** Each additional job inside the same warm window adds ≈0.02 €;
 each job that re-warms the cluster from cold adds ≈0.05 €.
+
+### 7.4 The one thing that does bill at rest — found 2026-08-17
+
+Every rate above is a rate per hour of *activity*. § 7.3 settled that even the
+load balancer stops when the cluster does. **A container registry does not.**
+
+| Resource | SKU | Rate | Stops when? |
+| --- | --- | --- | --- |
+| `Microsoft.ContainerRegistry/registries` | Basic, northeurope | **≈0.152 €/day ≈ 4.6 €/month** | **never**, while it exists |
+
+For scale: the whole project spent **0.187 €** across 2026-08-15 and 2026-08-16
+combined, running five jobs. A registry costs more than that **every day**,
+doing nothing.
+
+**Nobody provisioned it.** It was created at 06:23:21 UTC on 2026-08-17,
+sixty-two seconds after the first batch endpoint invocation, by that
+invocation's image build — and attached to the workspace. `main.bicep` declares
+no registry precisely so that none would exist; that intent was defeated by a
+workload, not by a template change.
+
+**The rule this produces, and it is a planning rule rather than a caution:**
+
+> A **curated** environment is pulled from Microsoft's registry and attaches
+> nothing. An environment built from a conda specification makes the
+> subscription acquire a container registry, permanently and at a daily rate.
+> Before choosing a custom environment, price the registry, not the build.
+
+**It also breaks the infrastructure template**, because detaching a registry
+from a workspace is not a supported operation — see the runbook, `infra/DEPLOY.md`
+§ 5. That is a deployment consequence rather than a cost one, but it arrives from
+the same event, and neither was visible before a batch deployment was attempted.
 
 ---
 

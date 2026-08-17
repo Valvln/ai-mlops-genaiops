@@ -119,7 +119,7 @@ predicts this will **not** fire, at deliberately low confidence.
 - [X] T024 [US1] Establish the failure is a **server-side refusal** — not a client-side failure, a wrong path, or an empty result (FR-025). Feature 004 recorded that not every refusal says `AuthorizationFailed`: the same run returned an ARM `AuthorizationFailed` and an Azure ML `UserError` with `ForbiddenError` only in an inner error
 - [X] T025 [US1] Add **exactly** the operation and scope the refusal names, to the principal it names, as a role assignment in `infra/main.bicep`, with the failing job name as its provenance comment. Never a built-in role, never a wildcard
 - [X] T026 [US1] Validate with `az bicep build infra/main.bicep`, and report the change as **compiled, not deployed**, until the gated run succeeds
-- [ ] T027 [US1] Propose the commit and the push that triggers the gated deployment. **The author approves the gate** — never approve it on their behalf
+- [X] T027 [US1] Propose the commit and the push that triggers the gated deployment. **The author approves the gate** — never approve it on their behalf
 
 ## Phase 1 closure
 
@@ -178,6 +178,15 @@ interpretation needs T030's job-active window.
 - [X] T047 [US4] [P] Build the scoring input at `mlops/training-pipeline/scoring-input/` from test-split rows, and **verify both predicted classes are present** before upload (FR-022). A single-class input would be satisfied by a deployment returning a constant
 - [X] T048 [US4] Download the **registered version** from the registry and compute its predictions on the scoring input locally — this is the right-hand side of the comparison, and it must be the registered model, not the Phase 1 local model. **Depends on T047**: there is no input to predict on until the scoring set exists
 - [X] T049 [US4] Upload the scoring input to the `training-data` container with `--auth-mode key`
+> **⛔ BLOCKED — 2026-08-17.** T050–T052 cannot proceed. The scoring job is
+> refused reading the model (see [results.md](./results.md)); the grant that
+> fixes it is written and compiles, but `main.bicep` cannot be deployed at all:
+> a custom environment build attached a container registry to the workspace, and
+> detaching one is unsupported. Run 32009142428 failed on the workspace, not on
+> the role assignment. Left unticked rather than closed — and the registry also
+> costs ≈4.6 €/month at rest, which is a decision for the author, recorded in
+> `infra/DEPLOY.md` § 5.
+
 - [ ] T050 [US4] 💶 Invoke the batch endpoint on the prepared input and wait for the scoring job to complete
 - [ ] T051 [US4] Retrieve the scoring output file
 - [ ] T052 [US4] Compare the endpoint's predictions against T048's, **row for row, exact match, in input order** (SC-011). A completed scoring job is not evidence — it proves compute ran
