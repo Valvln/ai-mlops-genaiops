@@ -1,0 +1,29 @@
+$schema: https://azuremlschemas.azureedge.net/latest/environment.schema.json
+
+# The serving environment, built here rather than derived from the model.
+#
+# Three attempts established why this file has to exist:
+#
+#   1. No-code deployment: Azure ML synthesises an environment from the model's
+#      conda.yaml and adds azureml-dataset-runtime, which requires
+#      pyarrow<4.0.0 while mlflow 3.13 requires pyarrow>=4.0.0. Empty
+#      intersection, all 35 published versions. Build fails.
+#   2. Naming the curated training environment: batch deployments reject a
+#      registry-scoped environment id, and sklearn-1.5:52 is a build-context
+#      environment tagged `Training`, with no image to reference.
+#   3. Naming Azure ML's own workspace batch environment: not addressable.
+#
+# So: an explicit image plus a conda specification with no mlflow in it. The
+# model is still an MLflow model and is still deployed by registered version -
+# but its pyfunc loader cannot be used at serving time, because mlflow is the
+# package that cannot coexist with the batch runtime. scoring.py loads the
+# sklearn flavor's pickle directly instead.
+
+name: ai300-batch-scoring
+description: >-
+  Batch scoring environment for ai300-decision-tree. Pinned to the library
+  versions the training job reported, so the estimator is unpickled by the
+  versions that pickled it. No mlflow: it conflicts with the batch runtime's
+  pyarrow ceiling.
+image: mcr.microsoft.com/azureml/openmpi4.1.0-ubuntu20.04:latest
+conda_file: scoring-conda.yml
