@@ -16,8 +16,21 @@ __pycache__/
 *.pyc
 
 data/
-downloaded-model/
 baseline.json
+
+# Local copies of the model. The deployment gets the model from the REGISTRY,
+# by version - shipping a copy in the code snapshot would put a second, unnamed
+# candidate on the node and make "which model answered" a question rather than
+# a fact.
+downloaded-model/
+registered-model/
+serving-model/
+
+# Scoring input arrives through the data store, like the training data.
+scoring-input/
+
+# MLflow's local fallback store, if a local run ever created one.
+mlruns/
 
 README.md
 pyproject.toml

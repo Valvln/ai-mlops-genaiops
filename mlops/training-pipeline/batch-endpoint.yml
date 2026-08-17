@@ -1,0 +1,23 @@
+$schema: https://azuremlschemas.azureedge.net/latest/batchEndpoint.schema.json
+
+# A BATCH endpoint, and the kind is the cost decision rather than a detail.
+#
+# A managed ONLINE endpoint bills for its deployment's VM continuously, from the
+# moment it is created until it is deleted, whether or not anything ever calls
+# it. A batch endpoint bills only while a scoring job runs: the endpoint itself
+# is a routing object with no compute behind it, and the cluster it points at is
+# at zero nodes between invocations.
+#
+# That is why this feature builds a batch endpoint and why no real-time endpoint
+# is created at any point (FR-019). The exam objective covers both; the wallet
+# does not.
+#
+# Create with:
+#   az ml batch-endpoint create -g rg-ai300-test01 -w ai300ml2mgou37pfmjou \
+#     -f mlops/training-pipeline/batch-endpoint.yml
+
+name: ai300-batch-dt
+description: >-
+  Batch scoring for the decision tree trained by job placid_knot_z03v76ysql and
+  registered as ai300-decision-tree. Costs nothing while idle; the cluster
+  underneath stays at zero nodes until an invocation allocates one.
