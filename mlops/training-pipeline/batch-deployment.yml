@@ -56,10 +56,26 @@ mini_batch_size: 10
 output_action: append_row
 output_file_name: predictions.csv
 
-# error_threshold -1 means no failure tolerance: any failed mini-batch fails the
-# job. The default swallows a proportion of failures, which would let a partial
-# result look like a complete one.
-error_threshold: -1
+# CORRECTED 2026-08-18. This line previously read `error_threshold: -1` under a
+# comment claiming that -1 meant no failure tolerance and that the default
+# swallowed failures. Both halves were wrong, and the deployment succeeding is
+# why nothing ever contradicted them: an assertion about a failure path is not
+# tested by a success path.
+#
+# The CLI v2 reference states the opposite. `error_threshold` is "the number of
+# file failures that should be IGNORED", it is counted "for the entire input and
+# not for individual mini batches", -1 IS the default, and "if omitted, any
+# number of file failures is allowed without terminating the job". So -1 was the
+# most permissive value available, not the strictest.
+#
+# 0 is the value the original intent asked for: zero ignored failures, so a
+# partial result cannot be mistaken for a complete one. Note the unit is FILES
+# across the whole input; retry_settings below is the separate per-mini-batch
+# mechanism.
+#
+# Source: https://learn.microsoft.com/en-us/azure/machine-learning/reference-yaml-deployment-batch
+# NOT re-verified against a live deployment - no batch endpoint currently exists.
+error_threshold: 0
 logging_level: info
 
 retry_settings:
