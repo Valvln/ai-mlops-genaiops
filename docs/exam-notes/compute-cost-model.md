@@ -43,7 +43,21 @@ az ml compute list-usage -g rg-ai300-test01 -w ai300ml2mgou37pfmjou -o table
 
 # Which sizes Azure ML supports here, and for which compute type
 az ml compute list-sizes -g rg-ai300-test01 -w ai300ml2mgou37pfmjou -o json
+
+# What was actually billed, by METER and by day. Grouping by ServiceName is the
+# reading that cannot answer "which machine" - see section 7.5, where a whole
+# day sat inside one "Virtual Machines" row. Add UsageQuantity: a rate derived
+# from cost and hours is a second, independent check on the meter's identity.
+# This endpoint returns 429 freely; the fix is to wait, not to change the query.
+az rest --method post \
+  --url "https://management.azure.com/subscriptions/5900fbc9-a139-49ed-9987-ba560c147eb7/providers/Microsoft.CostManagement/query?api-version=2023-11-01" \
+  --body '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"2026-08-17T00:00:00Z","to":"2026-08-17T23:59:59Z"},"dataset":{"granularity":"None","aggregation":{"cost":{"name":"Cost","function":"Sum"},"qty":{"name":"UsageQuantity","function":"Sum"}},"grouping":[{"type":"Dimension","name":"Meter"},{"type":"Dimension","name":"ServiceName"}]}}' \
+  --query "properties.rows" -o tsv
 ```
+
+Cost data for a deleted resource group stays queryable at subscription scope, so
+a teardown does not close an open cost question. Grouping by `ResourceId` still
+names the payer.
 
 Microsoft documentation is cited inline where it states a billing *rule* rather
 than a *price*. A rule that only appears in a forum answer is not cited.
@@ -655,7 +669,12 @@ load balancer stops when the cluster does. **A container registry does not.**
 
 | Resource | SKU | Rate | Stops when? |
 | --- | --- | --- | --- |
-| `Microsoft.ContainerRegistry/registries` | Basic, northeurope | **≈0.152 €/day ≈ 4.6 €/month** | **never**, while it exists |
+| `Microsoft.ContainerRegistry/registries` | Basic, northeurope | **0.1462 €/day ≈ 4.4 €/month** | **never**, while it exists |
+
+That rate was first written here as ≈0.152 €/day from a partial day. The
+meter-level reading of § 7.5 gives it exactly: 0.107410 € over 0.733784 day-units
+is **0.14638 €/day**, against a list price of **0.14620 €/day**. The correction
+is small and the conclusion is unchanged.
 
 For scale: the whole project spent **0.187 €** across 2026-08-15 and 2026-08-16
 combined, running five jobs. A registry costs more than that **every day**,
@@ -678,6 +697,73 @@ workload, not by a template change.
 from a workspace is not a supported operation — see the runbook, `infra/DEPLOY.md`
 § 5. That is a deployment consequence rather than a cost one, but it arrives from
 the same event, and neither was visible before a batch deployment was attempted.
+
+### 7.5 What the meter breakdown settled — read 2026-08-18, for 2026-08-17
+
+§ 7.4 named the registry and left a second figure of that day unexplained:
+2026-08-17 billed **0.332009 € of Virtual Machines** against a prediction of
+≈0.015 €, wrong by a factor of twenty. Grouped by service, the whole day is one
+row and the question cannot be asked. Grouped by **meter**, it answers itself:
+
+| Meter | Units | € | Implied rate |
+| --- | --- | --- | --- |
+| Virtual Machines · **E4ds v4** | **1.15002 h** | **0.323337** | 0.2812 €/h |
+| Virtual Machines · D1 v2/DS1 v2 | 0.150003 h | 0.008672 | 0.0578 €/h |
+
+**The prediction was not wrong. It was about a different machine.**
+`Standard_DS1_v2` billed 0.150 h at 0.0578 €/node-hour — the rate § 7.3 already
+established, from an independent day — and 9 minutes of node time for a day
+described as one eleven-minute allocation. Every quantity this project reasoned
+about was correct, and together they account for **2.6%** of the bill.
+
+**Nothing in this repository has ever asked for an `E4ds_v4`.** `main.bicep`
+declares one VM size, `Standard_DS1_v2`; `batch-deployment.yml` names
+`instance_count: 1` on that same cluster and nothing else. Grouping the day by
+`ResourceId` returns one payer for both meters — the **workspace** — and no
+resource of that size ever appeared in `az resource list`. It is billed through
+the workspace, by compute the customer neither sizes nor sees.
+
+**What separates 17/08 from the two days before it.** Grouping the whole period
+by meter *and* day is the discriminating test, and it is decisive:
+
+| Day | Work done | Environment | DS1 v2 | **E4ds v4** |
+| --- | --- | --- | --- | --- |
+| 15/08 | three cluster jobs | curated | 0.4167 h | — |
+| 16/08 | two cluster jobs | curated | 0.2833 h | — |
+| 17/08 | batch invocations | **custom** | 0.1500 h | **1.1500 h** |
+| 18/08 | rebuild, no jobs | — | — | — |
+
+Five cluster jobs across two days produced no E4 time whatsoever. The variable is
+neither job count nor node time: 15/08 and 16/08 ran
+`azureml://registries/azureml/environments/sklearn-1.5/versions/52`, a **curated**
+environment that is pulled, while 17/08 built `ai300-batch-scoring` from a conda
+specification four or five times over.
+
+**The rule of § 7.4 was understated.** A custom environment does not only make
+the subscription acquire a registry. Each *build* of it is billed as VM time, on
+a machine about five times the hourly price of the node the image was being built
+to feed:
+
+> A custom environment costs **≈0.28 €/hour of build time**, at ≈0.23 h per
+> build, **plus** a registry at 0.1462 €/day for as long as the environment
+> exists. A curated environment costs neither. On a failed deployment the build
+> is the expensive half, not the node — which is why four builds that never
+> allocated a node cost 37× the one allocation that did.
+
+This also retires a claim made on 2026-08-17 and repeated since: that the failed
+invocations were cheap *because* they died in image build without allocating
+nodes. They were cheap in node time and expensive in build time, and only the
+first half had been measured.
+
+**What is inferred here rather than read.** That the E4 time *is* the image
+builds is a day-level correlation, not an API reading. No Azure ML surface
+exposes the build compute, and the activity log for 2026-08-17 contains no
+compute create of any size. The correlation is as strong as this kind of evidence
+gets — perfect presence/absence against curated-versus-custom across four days,
+with the alternative explanation (cluster nodes) independently priced and
+accounted for — but the claim recorded is "billed alongside the image builds",
+not "measured on the image build compute". It is written at that strength on
+purpose.
 
 ---
 
