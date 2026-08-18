@@ -74,6 +74,21 @@ inadmissible under FR-006c.
 | `Microsoft.OperationalInsights/workspaces/read` | `31303489048` | `AuthorizationFailed … 'Microsoft.OperationalInsights/workspaces/read' over scope '…/workspaces/ai300law2mgou37pfmjou'` |
 | `Microsoft.MachineLearningServices/workspaces/read` | `31303655969` | `AuthorizationFailed … 'Microsoft.MachineLearningServices/workspaces/read' over scope '…/workspaces/ai300ml2mgou37pfmjou'` |
 | `Microsoft.Resources/deployments/read` | `31303842799` | `AuthorizationFailed … 'Microsoft.Resources/deployments/read' over scope '…/deployments/ai300-ci-31303842799'` |
+| `Microsoft.ContainerRegistry/registries/write` | `32112759907` | `InvalidTemplateDeployment … Authorization failed for template resource 'ai300crmxvtm2okukvmy' … does not have permission to perform action 'Microsoft.ContainerRegistry/registries/write'` |
+
+**Feature 004's five operations are in `infra/ci-identity.bicep` but not in this
+table.** They cite run `31899938698` in the template's own comments; the rows
+were never added here. They are not backfilled from those comments, because a
+row's evidence is the error excerpt and that excerpt was not preserved. The gap
+is recorded rather than papered over.
+
+**A refusal naming an already-granted operation is about scope, not breadth.**
+Runs `32111580715` and `32111854107` failed `AuthorizationFailed` on
+`Microsoft.Resources/deployments/validate/action` — row one of this table, held
+since `31303220508`. They targeted `rg-ai300-test01` after that group, and with
+it the role assignment *and the role definition*, had been deleted. Nothing was
+added for them. The change rule below says a failure names the missing
+operation; it does not say every named operation is missing.
 
 **Run `31303842799` deployed successfully and reported red.** Its deployment
 record is `Succeeded` in the history; the failure came afterwards, when the CLI

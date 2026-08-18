@@ -113,6 +113,20 @@ var verifiedActions = [
   // of the resource gets to phrase its own.
   'Microsoft.MachineLearningServices/workspaces/computes/read'
   'Microsoft.MachineLearningServices/workspaces/datastores/read'
+
+  // --- The template gained a container registry -----------------------------
+  //
+  // Run 32112759907, caught at validation - InvalidTemplateDeployment naming
+  // the resource by name. ONE operation named, so one added; the matching read
+  // stays out until a run demands it.
+  //
+  // Two earlier runs that day, 32111580715 and 32111854107, also came back
+  // AuthorizationFailed and contributed nothing. They targeted the deleted
+  // rg-ai300-test01 and named 'deployments/validate/action' - an operation
+  // already granted above. A refusal naming an operation the role already holds
+  // is a statement about SCOPE, not about breadth, and adding anything for it
+  // would have widened the role on evidence that said something else.
+  'Microsoft.ContainerRegistry/registries/write'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
