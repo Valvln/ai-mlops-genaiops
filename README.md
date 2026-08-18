@@ -200,6 +200,10 @@ Then I actually ran it, having only ever written it down before. The round trip 
 
 Two lines in the runbook turned out to be wrong, and finding out cost nothing but doing it. I had assumed the custom role definition would survive teardown — it doesn't, so a rebuild has to redeploy it first. And I had claimed a deleted workspace keeps its name; no API I could find would confirm that either way, so I withdrew the claim rather than repeat it. An honest "unverified" is worth more than a confident sentence I can't back up.
 
+### A comment that had been wrong for two features
+
+Re-reading the work against the documentation instead of against memory turned up a line that had survived two features unchallenged: a comment claiming -1 meant zero failure tolerance, when -1 is in fact the most permissive default there is — wrong on both counts, and never caught because a deployment that never failed could never test a claim about what happens when things fail. I corrected it to 0, labeled it as unverified rather than confirmed, and let three more write-ups join it in docs/exam-notes/ — sweeps, online endpoints, monitoring — each one honest that it is documented, not measured. Monitoring I dropped outright rather than deferred: with no production traffic, it could only compare my own training data against itself and report no drift, a green check proving nothing, the same failure this whole project keeps running into.
+
 ### `.github/workflows/` — validation and deployment
 
 **`bicep-validate.yml`** — recompiles every template under `infra/` on every push
@@ -220,11 +224,9 @@ through the exam objectives:
 
 | Folder              | Scope                                        |
 | ------------------- | -------------------------------------------- |
-| `mlops/`            | Classical ML operationalization              |
 | `genaiops/`         | Generative AI operationalization             |
 | `qa-observability/` | Quality assurance, monitoring, observability |
 | `rag-optimization/` | Retrieval-augmented generation               |
-| `docs/exam-notes/`  | AI-300 study notes                           |
 
 ## Running the validation locally
 
