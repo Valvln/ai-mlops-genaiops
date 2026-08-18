@@ -75,6 +75,23 @@ inadmissible under FR-006c.
 | `Microsoft.MachineLearningServices/workspaces/read` | `31303655969` | `AuthorizationFailed … 'Microsoft.MachineLearningServices/workspaces/read' over scope '…/workspaces/ai300ml2mgou37pfmjou'` |
 | `Microsoft.Resources/deployments/read` | `31303842799` | `AuthorizationFailed … 'Microsoft.Resources/deployments/read' over scope '…/deployments/ai300-ci-31303842799'` |
 | `Microsoft.ContainerRegistry/registries/write` | `32112759907` | `InvalidTemplateDeployment … Authorization failed for template resource 'ai300crmxvtm2okukvmy' … does not have permission to perform action 'Microsoft.ContainerRegistry/registries/write'` |
+| `Microsoft.ContainerRegistry/registries/operationStatuses/read` | `32113221779` | `AuthorizationFailed … does not have authorization to perform action 'Microsoft.ContainerRegistry/registries/operationStatuses/read' over scope '…/registries/ai300crmxvtm2okukvmy/operationStatuses/registries-2f9168a6-…'` |
+
+**The run that hung instead of failing.** `32113221779` produced no error in its
+log at all. It sat in "deploying" for 33 minutes while the registry it was
+waiting on had been created and reported `Succeeded` within seconds. The refusal
+existed the whole time, in the ARM deployment operation rather than in the run:
+`statusCode` `Forbidden` and `statusMessage.status` `Failed`, under a
+`provisioningState` of **`Running`**. ARM retries a post-create poll rather than
+abandoning it, so a missing read on an async operation status stalls
+indefinitely.
+
+Two consequences. A run with no output is a place to look for an authorization
+refusal — `az deployment operation group list` is where it is — and not a reason
+to keep waiting. And the operation was **not** the predicted one: the prediction
+was `registries/read`, the resource; the refusal named the operation-status
+endpoint. Adding the prediction would have widened the role and left the
+deployment hanging unchanged.
 
 **Feature 004's five operations are in `infra/ci-identity.bicep` but not in this
 table.** They cite run `31899938698` in the template's own comments; the rows

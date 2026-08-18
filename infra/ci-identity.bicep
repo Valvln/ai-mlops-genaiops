@@ -127,6 +127,28 @@ var verifiedActions = [
   // is a statement about SCOPE, not about breadth, and adding anything for it
   // would have widened the role on evidence that said something else.
   'Microsoft.ContainerRegistry/registries/write'
+
+  // Run 32113221779, AND THE FAILURE MODE IS THE POINT. This one did not go
+  // red. It HUNG - the workflow sat in "deploying" for 33 minutes with an empty
+  // log, and the registry itself was created and Succeeded within seconds.
+  //
+  // The refusal was real and never surfaced. It lives in the ARM deployment
+  // operation, not in the run:
+  //
+  //   az deployment operation group list -g <rg> --name <deployment>
+  //   -> statusCode Forbidden, statusMessage.status Failed,
+  //      provisioningState RUNNING
+  //
+  // ARM retries the post-create poll rather than giving up, so a missing read
+  // on an async operation status stalls forever instead of failing. A run stuck
+  // with no output is therefore a place to look for an authorization refusal,
+  // not a reason to wait longer.
+  //
+  // It is also not the operation that was predicted. The prediction was
+  // 'registries/read' - the resource. The refusal names the OPERATION STATUS
+  // endpoint, which is a different action, and adding the predicted one would
+  // have widened the role and left the deployment hanging exactly as before.
+  'Microsoft.ContainerRegistry/registries/operationStatuses/read'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
