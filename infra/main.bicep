@@ -6,6 +6,9 @@ param location string = 'northeurope'
 param storageAccountName string = 'ai300st${uniqueString(resourceGroup().id)}'
 param keyVaultName string = 'ai300kv${uniqueString(resourceGroup().id)}'
 param workspaceName string = 'ai300ml${uniqueString(resourceGroup().id)}'
+// Container registry names admit no hyphens and no uppercase — alphanumeric
+// only, 5-50 characters. 'ai300cr' + 13 characters of uniqueString is 20.
+param containerRegistryName string = 'ai300cr${uniqueString(resourceGroup().id)}'
 
 resource storageAccount 'Microsoft.Storage/storageAccounts@2023-01-01' = {
   name: storageAccountName
@@ -76,8 +79,68 @@ resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
   }
 }
 
-// No containerRegistry property: the workspace would otherwise provision one,
-// and nothing here needs it yet.
+// --- The registry, declared rather than acquired -----------------------------
+//
+// THIS RESOURCE EXISTS BECAUSE THE PLATFORM CREATED ONE ANYWAY.
+//
+// The earlier version of this template declared no registry, on the reasoning
+// that nothing needed one. That reasoning did not survive contact: building a
+// *custom* Azure ML environment makes Azure ML create a registry and attach it
+// to the workspace. Ours appeared on 2026-08-17 at 06:23:21 UTC, sixty-two
+// seconds after the first batch endpoint invocation, under the auto-generated
+// name e733615b3ab0446b9c1093c16f42a181. Nobody asked for it.
+//
+// The consequence was worse than the cost. A template that declares no registry
+// asks Azure, on every redeployment, to DETACH the one the workspace has
+// acquired — and Azure refuses:
+//
+//   BadRequest: Detaching Container Registry with workspace is not supported
+//
+// which left main.bicep undeployable regardless of what change was in flight.
+// Declaring the registry here is what restores deployability, and it buys a
+// second property worth more than that: the registry now derives its name from
+// the resource group like every other resource, so it is created with the group
+// and DIES WITH THE GROUP. An auto-attached registry is a resource the template
+// does not own; this one it owns.
+//
+// It is the only resource in this template that bills at rest — Basic tier,
+// northeurope, measured at 0.107 EUR over 17.6 h, so ~0.146 EUR/day ~ 4.4
+// EUR/month, accruing whether or not anything is built. That is the reason
+// this environment is treated as disposable: see the destroy/rebuild procedure
+// in infra/DEPLOY.md § 6.
+resource containerRegistry 'Microsoft.ContainerRegistry/registries@2025-04-01' = {
+  name: containerRegistryName
+  location: location
+  sku: {
+    // The cheapest tier that exists. Standard and Premium buy storage quota,
+    // throughput and geo-replication, none of which a single learning
+    // environment consumes.
+    name: 'Basic'
+  }
+  properties: {
+    // NARROWER THAN WHAT THE PLATFORM CHOSE, DELIBERATELY, AND NOT YET TESTED.
+    // The registry Azure ML created for itself has adminUserEnabled: true —
+    // read back from the live resource, not assumed. An admin user is a shared
+    // username/password on the registry, which is the opposite of every
+    // identity decision in this template, so it is declared false here.
+    //
+    // What that risks: an image build for a custom environment may turn out to
+    // require it. No build has been run against this declaration yet. If one
+    // fails naming registry credentials, THAT failure is the evidence to flip
+    // this line — not this comment, and not the platform's own preference.
+    adminUserEnabled: false
+    // Declared rather than defaulted, for the same reason as the workspace's
+    // managedNetwork: an isolation default that changes underneath the template
+    // is a cost or a connectivity failure discovered at the wrong moment.
+    publicNetworkAccess: 'Enabled'
+    anonymousPullEnabled: false
+  }
+  tags: {
+    project: 'ai300-prep'
+    environment: 'learning'
+  }
+}
+
 resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2026-05-01' = {
   name: workspaceName
   location: location
@@ -92,6 +155,9 @@ resource mlWorkspace 'Microsoft.MachineLearningServices/workspaces@2026-05-01' =
     storageAccount: storageAccount.id
     keyVault: kv.id
     applicationInsights: applicationInsights.id
+    // Attaching a registry the template owns is what stops the platform
+    // attaching one the template does not. See the resource above.
+    containerRegistry: containerRegistry.id
     // Declared rather than left to the service default: an isolation mode of
     // AllowOnlyApprovedOutbound provisions a managed Azure Firewall, billed
     // hourly whether or not anything uses it. what-if does not reveal the
@@ -390,6 +456,7 @@ resource clusterArtifactReadGrant 'Microsoft.Authorization/roleAssignments@2022-
 output storageAccountName string = storageAccount.name
 output keyVaultUri string = kv.properties.vaultUri
 output workspaceName string = mlWorkspace.name
+output containerRegistryName string = containerRegistry.name
 output workspaceId string = mlWorkspace.id
 output trainingContainerName string = trainingContainer.name
 output trainingDatastoreName string = trainingDatastore.name
