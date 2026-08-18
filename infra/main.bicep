@@ -38,9 +38,51 @@ resource kv 'Microsoft.KeyVault/vaults@2025-05-01' = {
     }
     enableRbacAuthorization: true
     enableSoftDelete: true
-    softDeleteRetentionInDays: 90
-    enablePurgeProtection: true
+    // 7 rather than 90, the minimum the service accepts. Retention is how long
+    // a deleted vault holds its GLOBALLY UNIQUE NAME, so it is also how long
+    // this template cannot recreate what it describes. Ninety days made the
+    // destroy/rebuild cycle a thing that could be done once.
+    softDeleteRetentionInDays: 7
   }
+  // NO enablePurgeProtection, AND THAT IS A DECISION — the earlier version of
+  // this template set it to true.
+  //
+  // First, what cannot be undone. Purge protection is irreversible on a live
+  // vault; that is measured here, not read in documentation:
+  //
+  //   az keyvault update --enable-purge-protection false
+  //   -> BadRequest: The property "enablePurgeProtection" cannot be set to
+  //      false. Enabling the purge protection for a vault is an irreversible
+  //      action.
+  //
+  // So this line changes nothing about a vault already deployed with it. It
+  // governs the next vault this template creates, and every one after.
+  //
+  // What it gives up is real: without purge protection, anyone holding Owner
+  // can permanently destroy this vault and its contents during the soft-delete
+  // window, with no recovery. Soft delete still covers ACCIDENTAL deletion —
+  // what is surrendered is the defence against a deliberate purge.
+  //
+  // Why that is the right trade HERE, on evidence rather than on comfort:
+  //
+  //   - Nothing in this resource group is encrypted with a key that lives in
+  //     this vault. The storage account reports keySource Microsoft.Storage
+  //     with keyVaultProperties null, and the workspace declares no encryption
+  //     block at all. The worst outcome purge protection exists to prevent -
+  //     purge the vault, and the data it protected becomes permanently
+  //     undecryptable - has no instance in this deployment.
+  //   - The CI identity cannot reach this either way: the role in
+  //     infra/ci-identity.bicep carries neither vaults/delete nor any purge
+  //     action.
+  //   - Every asset here is reproducible from this template and from git.
+  //
+  // And what it buys is the property this template is judged on. With purge
+  // protection, each teardown burned a globally unique name for 90 days, so
+  // "destroy and rebuild from the template" was an operation available once.
+  // Without it, teardown is: delete the group, purge the vault, redeploy - and
+  // the name is free again in minutes. A protection whose cost falls due every
+  // cycle and whose benefit is never collected is the wrong protection for the
+  // environment it guards. See infra/DEPLOY.md § 6.
   tags: {
     project: 'ai300-prep'
     environment: 'learning'
