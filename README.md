@@ -173,6 +173,26 @@ The measurements corrected me further. A cluster at rest consumes no vCPU quota 
 
 One criterion I could not close — my error, not the deployment's: I asked for cost data the same day, and cost data arrives roughly a day late. A criterion that cannot be checked when the work ends will quietly go unchecked. I scheduled it instead, and wrote the question down.
 
+### A model that trains, and an endpoint that does not answer
+
+This is the feature that failed, and if I could keep only one, it would be this.
+
+What works: a training job runs on the cluster, reads from the datastore, and MLflow tracks it without any configuration of mine. The model comes back as a versioned artifact, and the batch deployment names that version explicitly — never latest. Its predictions matched what I computed locally on all five hundred cases, which was the real success criterion; a run appearing in the portal would have proved nothing.
+
+What doesn't work: the endpoint answers nothing. Five invocations, five causes — four died at image build, before any node was allocated, which is the only reason the sequence was affordable at all.
+
+Two predictions were wrong, and they taught me more than the ones that held.
+
+I had logged the model in MLflow format specifically so Azure ML would write the scoring script and environment for me. It can't: the environment it synthesises needs a package requiring pyarrow<4, MLflow 3 requires >=4, and no version satisfies both. So I ended up with the custom scoring script the format was meant to spare me — and since that environment can't contain MLflow, the model loads from a plain pickle. The format bought nothing at serving time.
+
+The second prediction stings more. I expected the endpoint's identity would need a grant. The endpoint has no identity — the model sits on the compute node, so the cluster's identity does the reading. The mechanism was right; the actor, again, was wrong. Same mistake as the previous feature, twice now.
+
+Then the part nobody planned for: building that custom environment made Azure ML create a container registry on its own, sixty-two seconds after the first call. My template declares none, on purpose — so every redeploy now asks Azure to detach a registry it can't detach. main.bicep no longer deploys, for a reason unrelated to anything I had changed.
+
+It also gave the project its first cost that doesn't stop. Everything before this went to zero when I stopped working; this runs whether I show up or not. I had checked for a registry before starting — there wasn't one. That reading was correct, and correct about a subscription a later step would change. Existence and billing are separate ledgers, I already knew; this feature adds that when you check is part of what you're checking.
+
+My conclusion: this environment should be disposable. A template that can't rebuild what it describes is not a template — and an environment worth leaving running while idle is one I've stopped measuring.
+
 ### `.github/workflows/` — validation and deployment
 
 **`bicep-validate.yml`** — recompiles every template under `infra/` on every push
