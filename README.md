@@ -36,9 +36,7 @@ that bite most often:
   its validation step actually passes.
 - **Source of truth only** — generated artifacts are never tracked in git.
 
-This is deliberate practice for me: the interesting skill is not getting an agent
-to produce code, it is specifying work precisely enough that correctness becomes
-checkable, and then actually checking it.
+This is deliberate practice for me: the interesting skill is specifying work precisely enough that correctness becomes checkable, and then actually checking it.
 
 ## What is built so far
 
@@ -54,20 +52,21 @@ The decisions I made and why:
   so the template is portable across tenants.
 - **Resource names are generated** with `uniqueString(resourceGroup().id)`,
   because storage account and vault names must be globally unique.
-- **Soft delete with 90-day retention and purge protection enabled** — purge
-  protection is irreversible once on, which is exactly the kind of one-way door
-  worth understanding before an exam asks about it.
+- **Soft delete, at first with 90-day retention and purge protection enabled** —
+  purge protection is irreversible once on. The template no longer enables it, for
+  reasons further down.
 - **`Standard_LRS` and TLS 1.2 minimum** — the cheapest redundancy tier is the
   right default for learning; the TLS floor is not something to leave at default.
 
 I then extended the baseline with an Azure ML workspace, plus the Application
 Insights and Log Analytics resources it depends on.
 
-- **No Container Registry.** The workspace can provision one for itself, and I
-  did not let it: roughly $5/month for something no exercise needs yet. The
-  property is simply absent from the template rather than set to null.
-- **A system-assigned managed identity**, because the exam objective on identity
-  is the reason this workspace exists at all. The Key Vault was already on RBAC,
+- **No Container Registry, to begin with.** The workspace can provision one for
+  itself, and I did not let it: roughly $5/month for something no exercise needed
+  yet. That decision held until an exercise finally needed one, at which point
+  the platform created it without asking — so the template declares it now. The
+  reasoning is further down.
+- **A system-assigned managed identity**. The Key Vault was already on RBAC,
   so granting roles to that identity is the natural next step — no secrets,
   nothing to rotate.
 - **Application Insights is workspace-based, so a Log Analytics workspace came
@@ -192,6 +191,14 @@ Then the part nobody planned for: building that custom environment made Azure ML
 It also gave the project its first cost that doesn't stop. Everything before this went to zero when I stopped working; this runs whether I show up or not. I had checked for a registry before starting — there wasn't one. That reading was correct, and correct about a subscription a later step would change. Existence and billing are separate ledgers, I already knew; this feature adds that when you check is part of what you're checking.
 
 My conclusion: this environment should be disposable. A template that can't rebuild what it describes is not a template — and an environment worth leaving running while idle is one I've stopped measuring.
+
+### An environment I can afford to delete
+
+Since the last feature left me with a charge that doesn't stop, I stopped treating the environment as furniture. main.bicep now declares the container registry the platform had been attaching on its own — deployability restored, and the registry now dies with its resource group instead of outliving my attention. Purge protection on the Key Vault is gone too. I had turned it on to learn what an irreversible switch feels like, and now I know: it cannot be turned off, which is exactly why a throwaway environment shouldn't have one. Vaults from the current template purge in minutes, so the cycle can run more than once.
+
+Then I actually ran it, having only ever written it down before. The round trip took about twelve and a half minutes — 317 seconds to delete, 386 to rebuild. The gap between that and the wall clock wasn't the resources; it was the CI role. Rebuilding into a group it had never covered costs one approval per missing operation, and a single resource type alone needed three, surfacing one at a time.
+
+Two lines in the runbook turned out to be wrong, and finding out cost nothing but doing it. I had assumed the custom role definition would survive teardown — it doesn't, so a rebuild has to redeploy it first. And I had claimed a deleted workspace keeps its name; no API I could find would confirm that either way, so I withdrew the claim rather than repeat it. An honest "unverified" is worth more than a confident sentence I can't back up.
 
 ### `.github/workflows/` — validation and deployment
 
