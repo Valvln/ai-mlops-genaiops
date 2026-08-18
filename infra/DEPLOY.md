@@ -10,8 +10,13 @@ repeated, but every expected value below is now an observed one.
 **First deployment**: `ai300-ml-workspace-001`, resource group
 `rg-ai300-test01`, succeeded in 69 seconds
 
-Read the "One-way doors" section before running anything. One of the choices
-baked into the template cannot be undone for 90 days.
+**Currently deployed to `rg-ai300-test02`**, rebuilt from this template on
+2026-08-18 after `rg-ai300-test01` was destroyed whole. Sections 0–3 describe
+the first deployment and still name `rg-ai300-test01`; that is history, not the
+current target. § 6 is the destroy/rebuild cycle, with measured durations.
+
+Read the "One-way doors" section before running anything, and § 4 before leaving
+anything standing: one resource in this template bills at rest.
 
 ---
 
@@ -135,35 +140,48 @@ These are irreversible or reversible only after a long wait. They are a
 consequence of decisions already made in the template, not of the deployment
 command.
 
-### The Key Vault name is locked for 90 days once deployed
+### A Key Vault name outlives its vault — for 90 days, or for 7
 
-The vault sets `enablePurgeProtection: true`. That flag **cannot be turned off**
-once the vault exists. If the vault is later deleted, it enters a 90-day
-soft-delete retention during which it **cannot be purged** and its name **cannot
-be reused**.
-
-The trap is specific and easy to walk into. Vault names in this template are
-derived from `uniqueString(resourceGroup().id)`, and `resourceGroup().id` is
-`/subscriptions/<sub>/resourceGroups/<name>`. Deleting the resource group and
+**The template no longer sets `enablePurgeProtection`, and this door is now
+narrower than it was.** What has not changed is the name lock itself: a deleted
+vault holds its globally unique name for its soft-delete retention, and vault
+names here derive from `uniqueString(resourceGroup().id)`, which is
+`/subscriptions/<sub>/resourceGroups/<name>`. Deleting a resource group and
 recreating it **with the same name in the same subscription** produces the
-identical hash, therefore the identical vault name — which is still held by the
-soft-deleted, unpurgeable vault.
+identical hash, therefore the identical vault name — still held.
 
 The hash depends only on subscription and resource group name. It does **not**
-depend on region, so changing region does not sidestep this.
+depend on region, so changing region does not sidestep it.
 
-**Consequence**: tear down `rg-ai300-test01` today and redeploy to
-`rg-ai300-test01` next week, and the deployment fails on the Key Vault.
+| Vault deployed | Retention | Purgeable early? | Name reusable after |
+| --- | --- | --- | --- |
+| before 2026-08-18 (purge protection on) | 90 days | **no** | 90 days, no exception |
+| from 2026-08-18 (no purge protection) | 7 days | **yes**, `az keyvault purge` | minutes |
 
-**Mitigation in force**: the throwaway resource group name. `ai300kv2mgou37pfmjou`
-is now held for 90 days after any teardown; a redeploy would use
-`rg-ai300-test02`, which hashes differently.
+**Purge protection is irreversible on a live vault**, measured rather than read:
 
-### Machine learning workspace soft-delete
+```text
+az keyvault update --enable-purge-protection false
+-> BadRequest: The property "enablePurgeProtection" cannot be set to false.
+   Enabling the purge protection for a vault is an irreversible action.
+```
 
-Azure ML workspaces are also subject to soft-delete, with the workspace name
-held for a retention period after deletion. Treat workspace names the same way
-as vault names: assume reuse is blocked for a while.
+So the change governs vaults created after it and no others.
+`ai300kv2mgou37pfmjou` was deployed under the old template and holds its name
+until **2026-11-16**; `rg-ai300-test01` cannot be recreated before then, which
+is why the rebuild went to `rg-ai300-test02`. Vaults from here on are purged in
+§ 6.1 as a normal step of the teardown.
+
+### Machine learning workspace soft-delete — asserted here, never verified
+
+This runbook stated that workspace names are held for a retention period after
+deletion, and treated that as equivalent to the vault lock. **There is no
+evidence for it in this project.** After the 2026-08-18 teardown no
+`deletedWorkspaces` endpoint responded on any of three API versions, so the
+claim is neither confirmed nor refuted — it is withdrawn.
+
+It does not affect the cycle either way: a new resource group yields a new
+`uniqueString`, so every derived name changes together.
 
 ### Provider registration
 
@@ -535,21 +553,44 @@ one cluster, on one workspace, with managed networking disabled.
 
 ## 4. Cost
 
-**At rest, this deployment should cost approximately nothing.** None of the five
-resources carries a fixed monthly fee:
+**At rest, this deployment costs the registry and nothing else.** This paragraph
+used to read "approximately nothing", which was true of the five resources the
+template then declared. It is not true now:
 
 | Resource | Billing model | At this usage |
 | --- | --- | --- |
+| **Container registry (`Basic`)** | **fixed daily rate** | **≈0.146 EUR/day ≈ 4.4 EUR/month, used or not** |
 | Storage account (`Standard_LRS`) | per GB stored | empty — negligible |
 | Key Vault (standard) | per 10k operations | idle — negligible |
 | Log Analytics workspace | per GB ingested, free monthly allowance | well inside it |
 | Application Insights | ingestion billed via Log Analytics | well inside it |
 | ML workspace (`Basic`) | no charge for the workspace itself | free |
 
+**The registry sets a floor that idleness does not reduce.** It is the only
+resource here that does not stop when the work stops — which makes the operative
+question about any resource in this project not "is it expensive" but **"does it
+stop"**. A compute cluster at zero nodes stops. A registry does not. An
+environment that will not be used is therefore destroyed rather than left idle;
+§ 6 makes that one command and a measured five minutes.
+
 **Verify rather than trust this table.** Check Cost Management → Cost analysis
-after 24–48 hours, filtered to `rg-ai300-test01`. A number that is not
-approximately zero means something was provisioned that this template did not
-declare.
+after 24–48 hours, filtered to the resource group. Anything above the registry's
+own rate means something was provisioned that this template did not declare.
+
+```bash
+# Per-resource-group daily actuals. `az consumption usage list` returns records
+# with a null cost on this subscription, and a null is not a zero.
+az rest --method post \
+  --url "https://management.azure.com/subscriptions/<sub>/providers/Microsoft.CostManagement/query?api-version=2023-03-01" \
+  --headers "Content-Type=application/json" \
+  --body '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"<from>T00:00:00Z","to":"<to>T23:59:59Z"},"dataset":{"granularity":"Daily","aggregation":{"total":{"name":"Cost","function":"Sum"}},"grouping":[{"type":"Dimension","name":"ResourceGroupName"}]}}'
+```
+
+**A resource group missing from that output has no cost data yet — it does not
+have a cost of zero.** `rg-ai300-test02` was absent for its whole first day.
+Reading that as "verified free" would repeat the error this project has already
+made twice: on 2026-08-17 a resource inventory taken before the step that
+created a registry, and the same day a compute estimate wrong by a factor of 20.
 
 **The template now declares compute, and billing can become hourly.** Feature
 004 added a blob container, a credential-less datastore, and an **AmlCompute
@@ -571,7 +612,7 @@ command returned an *empty* `node_state_counts`, which is not a zero. The
 positive reading comes from ARM:
 
 ```bash
-az rest --method get --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/rg-ai300-test01/providers/Microsoft.MachineLearningServices/workspaces/<ws>/computes/ai300-cpu-cluster?api-version=2026-05-01" \
+az rest --method get --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/<rg>/providers/Microsoft.MachineLearningServices/workspaces/<ws>/computes/ai300-cpu-cluster?api-version=2026-05-01" \
   --query "properties.properties.{alloc:allocationState, current:currentNodeCount, states:nodeStateCounts}"
 ```
 
@@ -624,7 +665,7 @@ authority it runs with, and it is not permitted to.
 | Application `ai300-github-deploy` + service principal | Entra | author, `az ad` |
 | Federated credential `github-azure-deploy-environment` | Entra | author, `az ad` |
 | Environment `azure-deploy` + four repository secrets | GitHub | author |
-| Custom role `AI300 CI Deployer (rg-ai300-test01)` + assignment | ARM | author, `infra/ci-identity.bicep` |
+| Custom role `AI300 CI Deployer (<rg>)` + assignment | ARM | author, `infra/ci-identity.bicep` |
 | Probe resource group `rg-ai300-probe` | ARM | author, `az group create` |
 
 The application has **zero password credentials and zero certificate
@@ -660,7 +701,7 @@ nothing without a token from the trusted issuer.
    Only the three claims are printed. The token itself never is.
 
 5. Create the federated credential from that observed value.
-6. `az deployment group create -g rg-ai300-test01 -f infra/ci-identity.bicep
+6. `az deployment group create -g <rg> -f infra/ci-identity.bicep
    --parameters principalId=<service principal OBJECT id>`.
 
 Step 6 wants the **service principal object id**, not the application (client)
@@ -715,7 +756,7 @@ Administrator`, would end the interruption and also end the property the
 narrowness exists for — probe P4 would begin to succeed, and the boundary job
 would go red for a good reason.
 
-### 🚨 `main.bicep` is currently NOT DEPLOYABLE — 2026-08-17
+### The registry the workspace attached, and how it froze the template — 2026-08-17, resolved 2026-08-18
 
 **Read this before starting any infrastructure work.** The blocker is not in the
 template's own text and will not be found by reading it.
@@ -754,17 +795,22 @@ flight does not restore deployability.
    subscription acquires a permanent resource and the IaC drifts from reality.
    Prefer curated environments; when one will not do, expect this.
 
-**Deciding what to do is open, and it is the author's call**, because both
-directions have a cost:
+**Resolved on 2026-08-18, and not by any of the three options weighed here.**
+Those were: declare the *existing* registry, accepting an auto-generated name in
+a declarative file; remove it, which detaching makes impossible; or leave the
+template frozen. The way out was a fourth — destroy the environment and rebuild
+it, so the template declares a registry of its own with a name derived like
+every other resource.
 
-| Option | Consequence |
-| --- | --- |
-| Declare the existing registry in `main.bicep` | Deployability returns. ≈4.6 €/month accepted indefinitely. The template carries an auto-generated name, which is a runtime value in a declarative file |
-| Remove the registry | Detaching is unsupported, so the workspace would reference a deleted resource. Recreating the workspace collides with the 90-day Key Vault name lock (§ 6). **Not attempted** |
-| Leave it | No new cost decision, and no infrastructure deployment is possible until it is resolved |
+That is why the registry is a `Microsoft.ContainerRegistry/registries` resource
+in `main.bicep` today, and why it is created with the resource group and dies
+with it. The registry the platform attached, `e733615b3ab0446b9c1093c16f42a181`,
+was destroyed with `rg-ai300-test01`. The template is deployable again — run
+`32117736286`, both jobs green, into `rg-ai300-test02`.
 
-Until this is resolved, treat `infra/**` as frozen: a push to `main` touching it
-will queue a gate whose deployment cannot succeed.
+**The charge did not go away; it became bounded.** ≈4.4 EUR/month still accrues
+for as long as the environment stands. What changed is that ending it is now one
+command with a measured duration, which is what § 6 is for.
 
 ### Reading a red run correctly
 
@@ -778,7 +824,7 @@ And two traps observed during the work, both worth knowing before debugging:
 - **A green run is not proof that something was deployed**, and **a red run is
   not proof that nothing was.** Run `31303842799` deployed successfully and then
   failed reading the deployment back. Check
-  `az deployment group list -g rg-ai300-test01` before concluding anything.
+  `az deployment group list -g <rg>` before concluding anything.
 - **An `az` command that fails may never have reached Azure.** The CLI resolves
   the subscription from a local account cache first; with no role assignment that
   cache is empty and the failure is client-side. `No subscriptions found` and
@@ -799,10 +845,10 @@ APP_ID=<application client id>
 
 # 1. The role assignment
 az role assignment delete --assignee-object-id "$SP_OBJECT_ID" \
-  --scope "/subscriptions/$SUB/resourceGroups/rg-ai300-test01"
+  --scope "/subscriptions/$SUB/resourceGroups/$RG"
 
 # 2. The custom role definition
-az role definition delete --name "AI300 CI Deployer (rg-ai300-test01)"
+az role definition delete --name "AI300 CI Deployer ($RG)"
 
 # 3. The federated credential
 az ad app federated-credential delete --id "$APP_ID" \
@@ -844,30 +890,181 @@ nothing on its own and documents what the authority was.
 
 ---
 
-## 6. Teardown
+## 6. Destroy and rebuild
 
-Deleting the resource group removes the billable surface in one command:
+**This environment is disposable, and that is a design property rather than a
+habit.** One resource in it bills at rest — the container registry, measured at
+≈0.146 EUR/day — so an environment standing idle accrues charge for nothing. The
+cheapest idle environment is a deleted one, and the only thing that makes
+deletion safe is that this template can rebuild what it describes.
+
+Every duration below was measured on 2026-08-18, tearing down
+`rg-ai300-test01` (11 resources: workspace, registry, storage, vault, Log
+Analytics, App Insights, a batch endpoint with three deployments) and rebuilding
+into `rg-ai300-test02`.
+
+### 6.1 Destroy
 
 ```bash
-az group delete --name rg-ai300-test01 --yes --no-wait
+export PATH="/usr/local/bin:$PATH"
+RG=rg-ai300-test01          # the group being destroyed
+
+# Blocking, so the wall clock is real. --no-wait returns immediately and tells
+# you nothing about when the resources are actually gone.
+time az group delete --name "$RG" --yes
 ```
 
-**But re-read the one-way doors first.** After this runs:
+**Measured: 317 s (5 min 17 s).** Nothing needs stopping or detaching first; the
+group deletion takes the workspace, the registry and the endpoints together.
 
-- The Key Vault is soft-deleted with purge protection, holding
-  `ai300kv2mgou37pfmjou` for 90 days. Recreating `rg-ai300-test01` will collide;
-  use `rg-ai300-test02`.
-- The ML workspace name is likewise held for its retention window.
+Then purge the vault, which is the step that makes the cycle repeatable:
 
 ```bash
-# Inspect what is being held after a teardown
 az keyvault list-deleted \
-  --query "[].{name:name, purgeDate:properties.scheduledPurgeDate}" -o table
+  --query "[].{name:name, purgeDate:properties.scheduledPurgeDate,
+               protected:properties.purgeProtectionEnabled}" -o table
+
+az keyvault purge --name <the vault name> --location northeurope
 ```
 
-**Portal equivalent**: Resource group → Delete resource group → type the name to
-confirm. Soft-deleted vaults are visible under Key Vaults → Manage deleted
-vaults.
+**A vault deployed before 2026-08-18 cannot be purged.** Purge protection is
+irreversible on a live vault — `az keyvault update --enable-purge-protection
+false` returns `BadRequest`, measured — so `ai300kv2mgou37pfmjou` holds its name
+until **2026-11-16** and `rg-ai300-test01` cannot be recreated before then.
+Vaults created from the current template carry no purge protection and a 7-day
+retention, so the purge succeeds and the name is free in minutes.
+
+### 6.2 What survives a teardown
+
+Verified by listing after the deletion, not predicted:
+
+| Object | Survives? |
+| --- | --- |
+| Key Vault, soft-deleted | **yes**, holding its name until purged or expired |
+| Entra application, service principal, federated credential | **yes** |
+| GitHub environment `azure-deploy` and the four secrets | **yes** |
+| Probe resource group `rg-ai300-probe` | **yes** — probe P2 needs it |
+| Custom role definition `AI300 CI Deployer (<rg>)` | **no** |
+
+**The role definition does not survive, and that corrected an assumption written
+here.** This runbook expected it to persist at subscription scope with an
+`assignableScopes` entry pointing at a deleted group. It does not:
+`az role definition list --custom-role-only true` came back empty. A rebuild
+must therefore redeploy `ci-identity.bicep`, and cannot skip it.
+
+**Whether the ML workspace name is held is unverified.** This runbook used to
+assert it was. No `deletedWorkspaces` endpoint responded on three API versions,
+so there is no evidence either way — the claim is withdrawn rather than
+repeated. It does not affect the cycle: a new resource group yields a new
+`uniqueString`, so every derived name changes anyway.
+
+### 6.3 Rebuild
+
+The resource group name must be new whenever the previous vault is still held.
+Everything else is derived from it.
+
+```bash
+RG=rg-ai300-test02
+SP_OBJECT_ID=<service principal object id>
+
+# 1. The container.                                    measured: 4 s
+az group create --name "$RG" --location northeurope \
+  --tags project=ai300-prep environment=learning
+
+# 2. The authority CI runs with. The author deploys this, never CI - CI cannot
+#    create its own authority.                         measured: 40 s
+az deployment group create -g "$RG" \
+  --template-file infra/ci-identity.bicep \
+  --parameters principalId="$SP_OBJECT_ID"
+
+# 3. Point the workflow at the new group. Two places: the deploy step and the
+#    P4 probe URL, which must attempt an undeclared type inside the scope the
+#    role actually covers.
+#    NOTE: this file is NOT under infra/**, so committing it alone triggers
+#    nothing. Use workflow_dispatch.
+$EDITOR .github/workflows/infra-deploy.yml
+
+# 4. Free, and it catches what `az bicep build` cannot - region eligibility and
+#    name length. Expect 12 creates.
+az deployment group what-if -g "$RG" --template-file infra/main.bicep
+
+# 5. Deploy through the gate.
+gh workflow run infra-deploy.yml -R Valvln/ai-mlops-genaiops --ref main
+```
+
+**Measured: 386 s (6 min 27 s)** for the template deployment itself, once the
+role was complete. Azure time for a full cycle is therefore **≈12.5 minutes**:
+317 s down, 430 s up.
+
+Wall-clock time is longer, and the difference is the role, not the resources.
+
+### 6.4 Budget the gated runs, not the minutes
+
+A rebuild into a group the role has never covered costs **one approval per
+missing operation**, and that is the discovery mechanism working as designed
+(§ 5). The 2026-08-18 rebuild spent five gated runs:
+
+| Run | Outcome |
+| --- | --- |
+| `32111580715`, `32111854107` | wasted — targeted the deleted group. See below |
+| `32112759907` | named `Microsoft.ContainerRegistry/registries/write` |
+| `32113221779` | **hung 33 min**, named `registries/operationStatuses/read` |
+| `32116890282` | named `Microsoft.ContainerRegistry/registries/read` |
+| `32117736286` | green, both jobs |
+
+Three things from that sequence are worth carrying forward:
+
+- **One resource type cost three operations, one per run.** No failure named
+  more than one. Feature 004 saw the opposite — one failure naming three — and
+  both are true: what governs it is the stage the refusal happens at, not how
+  many types were added.
+- **A run stuck with no output is a place to look for a refusal.** Run
+  `32113221779` sat in "deploying" for 33 minutes with an empty log while the
+  registry it waited on had been created and reported `Succeeded` in seconds.
+  The refusal was in the ARM deployment operation the whole time, under a
+  `provisioningState` of `Running`:
+
+  ```bash
+  az deployment operation group list -g "$RG" --name <deployment> \
+    --query "[?properties.statusCode=='Forbidden'].properties.statusMessage.error.message" -o tsv
+  ```
+
+  ARM retries a post-create poll rather than abandoning it, so a missing read on
+  an async operation status stalls indefinitely instead of going red. Cancel it;
+  waiting longer cannot help.
+- **Order the commits so no run targets a group that no longer exists.** The two
+  wasted runs deployed against `rg-ai300-test01` because the commits changing
+  `main.bicep` landed before the commit repointing the workflow. Both failed
+  `AuthorizationFailed` naming `Microsoft.Resources/deployments/validate/action`
+  — an operation the role **already held**. A refusal naming an already-granted
+  operation is a statement about scope, not about breadth, and nothing should be
+  added to the role for it.
+
+### 6.5 Verify the rebuild
+
+```bash
+# Cluster free at rest - read from the service, never from the template
+az rest --method get --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/$RG/providers/Microsoft.MachineLearningServices/workspaces/<ws>/computes/ai300-cpu-cluster?api-version=2026-05-01" \
+  --query "properties.properties.{alloc:allocationState, current:currentNodeCount, states:nodeStateCounts}"
+
+# The workspace uses the registry the TEMPLATE owns, not one it acquired
+az rest --method get --url "https://management.azure.com/subscriptions/<sub>/resourceGroups/$RG/providers/Microsoft.MachineLearningServices/workspaces/<ws>?api-version=2026-05-01" \
+  --query "properties.containerRegistry"
+
+# Read AFTER the work, never before: the platform provisions types the template
+# does not name, and it has done so three times
+az resource list -g "$RG" --query "[].type" -o tsv | sort | uniq -c
+```
+
+Observed on the 2026-08-18 rebuild: `allocationState: Steady`, all six node
+buckets `0`, `targetNodeCount: 0`; the registry property naming
+`ai300crmxvtm2okukvmy`; and seven resource types, the seven the template
+declares plus `microsoft.insights/actiongroups`, which Application Insights
+Smart Detection provisions on its own.
+
+**Portal equivalent for the teardown**: Resource group → Delete resource group →
+type the name to confirm. Soft-deleted vaults are under Key Vaults → Manage
+deleted vaults.
 
 ---
 
@@ -897,3 +1094,15 @@ vaults.
 - [x] That identity's grant proven load-bearing: 403 without it, 201 with it,
       same request
 - [x] Reversal for feature 003 written as twelve runnable commands — section 5.1
+- [x] The registry the platform attached is now declared by the template, owned
+      by it, and dies with the resource group — section 5
+- [x] Destroy and rebuild proven by doing it, not by writing it down: 317 s down,
+      430 s up, five gated runs — section 6
+- [x] Purge protection dropped so a vault name is reusable within minutes rather
+      than after 90 days — "One-way doors"
+- [x] Cluster verified at zero nodes on the rebuilt environment, read from ARM
+- [ ] **At-rest cost of `rg-ai300-test02` confirmed** — not verifiable on the day
+      of the rebuild: Cost Management had no data for the group yet, and an
+      absent row is not a zero. Expect the registry's ≈0.146 EUR/day and nothing
+      else; anything above that is an undeclared resource. Command in section 4
+- [ ] Workspace name soft-delete — claim **withdrawn**, no evidence either way
