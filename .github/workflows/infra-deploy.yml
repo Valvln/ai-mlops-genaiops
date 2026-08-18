@@ -55,7 +55,7 @@ jobs:
       - name: Deploy
         run: |
           az deployment group create \
-            --resource-group rg-ai300-test01 \
+            --resource-group rg-ai300-test02 \
             --template-file infra/main.bicep \
             --name "ai300-ci-${{ github.run_id }}"
 
@@ -158,5 +158,5 @@ jobs:
           "${RUNNER_TEMP}/refuse.sh" P4 \
             'Microsoft.ManagedIdentity/userAssignedIdentities/write' \
             az rest --method put \
-              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-ai300-test01/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-ai300-denied-probe?api-version=2024-11-30" \
+              --url "https://management.azure.com/subscriptions/${{ secrets.AZURE_SUBSCRIPTION_ID }}/resourceGroups/rg-ai300-test02/providers/Microsoft.ManagedIdentity/userAssignedIdentities/id-ai300-denied-probe?api-version=2024-11-30" \
               --body '{"location":"northeurope"}'
