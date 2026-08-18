@@ -77,6 +77,17 @@ inadmissible under FR-006c.
 | `Microsoft.ContainerRegistry/registries/write` | `32112759907` | `InvalidTemplateDeployment … Authorization failed for template resource 'ai300crmxvtm2okukvmy' … does not have permission to perform action 'Microsoft.ContainerRegistry/registries/write'` |
 | `Microsoft.ContainerRegistry/registries/operationStatuses/read` | `32113221779` | `AuthorizationFailed … does not have authorization to perform action 'Microsoft.ContainerRegistry/registries/operationStatuses/read' over scope '…/registries/ai300crmxvtm2okukvmy/operationStatuses/registries-2f9168a6-…'` |
 
+| `Microsoft.ContainerRegistry/registries/read` | `32116890282` | `AuthorizationFailed … does not have authorization to perform action 'Microsoft.ContainerRegistry/registries/read' over scope '…/registries/ai300crmxvtm2okukvmy'` |
+
+**One resource type cost three runs and three distinct operations**, and no
+single failure named more than one of them: `registries/write` at validation,
+`registries/operationStatuses/read` as a silent hang, `registries/read` during
+execution. Feature 004 concluded that "one operation per run" was a symptom
+rather than a rule, because one of its failures named three at once. Both
+readings are right and neither predicts the other — what determines how many
+arrive together is the stage the refusal happens at, not the number of types
+added.
+
 **The run that hung instead of failing.** `32113221779` produced no error in its
 log at all. It sat in "deploying" for 33 minutes while the registry it was
 waiting on had been created and reported `Succeeded` within seconds. The refusal

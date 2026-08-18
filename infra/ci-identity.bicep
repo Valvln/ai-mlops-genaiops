@@ -149,6 +149,12 @@ var verifiedActions = [
   // endpoint, which is a different action, and adding the predicted one would
   // have widened the role and left the deployment hanging exactly as before.
   'Microsoft.ContainerRegistry/registries/operationStatuses/read'
+
+  // Run 32116890282, during execution - the round the prediction expected, one
+  // later than it expected it. The registry took three runs and three distinct
+  // operations: write at validation, the operation-status read as a hang, and
+  // the resource read here. No single failure named more than one of them.
+  'Microsoft.ContainerRegistry/registries/read'
 ]
 
 resource ciDeployerRole 'Microsoft.Authorization/roleDefinitions@2022-04-01' = {
