@@ -195,6 +195,130 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
   }
 }
 
+// --- Where traces go (User Story 3) ------------------------------------------
+//
+// FOUNDRY HAS NO TRACE STORE OF ITS OWN. That is the finding behind these two
+// resources, not an architectural preference: the portal's tracing view is a
+// reader over a connected Application Insights resource, and if nothing is
+// connected there is nothing to read. Making a call retrievable AFTER THE FACT
+// — the whole of User Story 3 — therefore means owning the store the call is
+// written to (research.md § R6).
+//
+// Neither resource bills at rest, and that was checked rather than assumed.
+// The Retail Prices API for swedencentral publishes no per-hour or
+// per-instance meter for either type; every meter is consumption-priced
+// (Standard Data Analyzed EUR 2.0208/GB, retention EUR 0.1142/GB/month beyond
+// the free 31 days), and the first 5 GB/month of ingestion is free. This
+// feature emits kilobytes. Both rows were added to spec.md's Cost table before
+// this code was written, which is the order constraint 4 requires.
+resource logAnalytics 'Microsoft.OperationalInsights/workspaces@2025-07-01' = {
+  name: 'ai300fdrylaw${uniqueString(resourceGroup().id)}'
+  location: location
+  properties: {
+    sku: {
+      name: 'PerGB2018'
+    }
+    // Equal to the free retention allowance, and declared rather than
+    // defaulted for exactly that reason: retention beyond 31 days is the one
+    // line item here that could turn a free workspace into a billed one, and
+    // a default that moves is how that happens unnoticed.
+    retentionInDays: 30
+  }
+  tags: commonTags
+}
+
+resource applicationInsights 'Microsoft.Insights/components@2020-02-02' = {
+  name: 'ai300fdryappi${uniqueString(resourceGroup().id)}'
+  location: location
+  kind: 'web'
+  properties: {
+    Application_Type: 'web'
+    // Workspace-based, which is the only kind still supported — a classic
+    // component would have its own retention and its own bill.
+    WorkspaceResourceId: logAnalytics.id
+    IngestionMode: 'LogAnalytics'
+    RetentionInDays: 30
+  }
+  tags: commonTags
+}
+
+// --- Connecting the store to the project -------------------------------------
+//
+// THE ONE API VERSION IN THIS TEMPLATE THAT WAS NOT VERIFIED IN ADVANCE.
+// research.md § R3 and § R6 flagged 2025-04-01-preview as sourced from a
+// public GitHub sample of unknown age rather than from this subscription, and
+// tasks.md T018 carried that flag forward as the last open assumption in the
+// plan. It is settled by `az bicep build` and `az deployment group what-if`
+// against the live subscription before this file is deployed, never by the
+// sample being cited — the difference between "compiles" and "the provider
+// accepts it" is a distinction this repository has already paid for twice.
+//
+// Two connections, not one: the account-level one is what the portal's own
+// tracing surface reads, the project-level one is what a project-scoped client
+// resolves. Both were verified to exist after deployment by listing them
+// through the ARM connections API.
+//
+// WHAT THE HARNESS DOES *NOT* DO WITH THEM, AND WHY. The obvious use for the
+// project connection is
+// `AIProjectClient(...).telemetry.get_application_insights_connection_string()`
+// — let the app discover its own telemetry target instead of being told. That
+// was tried and refused:
+//
+//   PermissionDenied — The principal ... lacks the required data action
+//   `Microsoft.CognitiveServices/accounts/AIServices/connections/read`
+//
+// Closing it would cost more than it buys. The only built-in role carrying
+// that action is Cognitive Services User, whose dataActions are
+// `Microsoft.CognitiveServices/*` — the whole data plane, for one lookup. A
+// one-action custom role would be narrow, but a roleDefinition is an
+// authorization-provider object, not a resource-group one: it would survive
+// `az group delete` and leave exactly the kind of residue SC-007 asserts is
+// absent. So call_model.py takes the connection string from the App Insights
+// resource directly, and these connections stay what they are — the wiring the
+// PORTAL reads, deployed and verified, not something the harness depends on.
+var appInsightsConnectionName = '${foundryAccountName}-appinsights'
+
+resource accountAppInsightsConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
+  parent: foundryAccount
+  name: appInsightsConnectionName
+  properties: {
+    category: 'AppInsights'
+    target: applicationInsights.id
+    // ApiKey is the connection's OWN auth type — how the Foundry resource
+    // authenticates to Application Insights — and is unrelated to
+    // disableLocalAuth above, which governs how callers authenticate to the
+    // Foundry data plane. The key is the App Insights connection string,
+    // resolved from the resource at deploy time rather than written down: it
+    // never appears in this file, in git, or in a deployment parameter.
+    authType: 'ApiKey'
+    credentials: {
+      key: applicationInsights.properties.ConnectionString
+    }
+    isSharedToAll: true
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: applicationInsights.id
+    }
+  }
+}
+
+resource projectAppInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
+  parent: foundryProject
+  name: appInsightsConnectionName
+  properties: {
+    category: 'AppInsights'
+    target: applicationInsights.id
+    authType: 'ApiKey'
+    credentials: {
+      key: applicationInsights.properties.ConnectionString
+    }
+    metadata: {
+      ApiType: 'Azure'
+      ResourceId: applicationInsights.id
+    }
+  }
+}
+
 // --- Letting a human actually call it ----------------------------------------
 //
 // DISCOVERED BY FAILING, with the refusal quoted verbatim. The first run of
