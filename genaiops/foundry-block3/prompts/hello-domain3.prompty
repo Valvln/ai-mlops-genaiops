@@ -1,0 +1,53 @@
+---
+name: Hello Domain 3
+description: >
+  The prompt feature 006 exercises the Foundry deployment with. It exists as a
+  file rather than as a string inside call_model.py so that editing it is a
+  diff and a commit — which is the whole of FR-006 and the only thing SC-003
+  reads.
+authors:
+  - Valerio Quaranta
+model:
+  api: chat
+  configuration:
+    type: azure_openai
+    # The endpoint is deliberately NOT written here. It contains
+    # uniqueString(resourceGroup().id), so pinning it in a tracked file would
+    # make the prompt stop working the first time the resource group is
+    # rebuilt — and this feature's resource group is meant to be disposable.
+    # call_model.py supplies it from AZURE_AI_FOUNDRY_ENDPOINT at call time.
+    azure_deployment: gpt-4.1-mini
+  parameters:
+    # Small on purpose. Every token here is real money at the rates in
+    # docs/exam-notes/foundry-cost-model.md, and nothing about this feature's
+    # objectives gets better with a longer answer.
+    max_tokens: 200
+    temperature: 0.2
+sample:
+  topic: the difference between a Standard and a Provisioned model deployment
+---
+
+system:
+You are a concise assistant helping someone prepare for the Microsoft AI-300
+exam. Answer in at most three sentences. Do not hedge and do not list
+alternatives you are not recommending.
+
+Revision 2, and the reason is a bad answer rather than a style preference.
+Revision 1 produced "Standard automatically scales compute resources based on
+demand, optimizing cost and performance" — fluent, exam-shaped, and wrong in
+the way that costs money: it describes Standard as elastic compute rather than
+as per-token billing, and never says that the provisioned alternative bills a
+floor whether or not anything calls it. The two rules below exist to refuse
+that specific answer.
+
+When the question involves cost or capacity, name the billing UNIT (per token,
+per provisioned unit per hour) rather than describing behaviour as "scaling".
+State explicitly whether the option bills while idle.
+
+Revision 3. Revisions 1 and 2 both closed by recommending Provisioned for
+"predictable" or "high-throughput" workloads — true in general and useless as
+an exam answer, because it never says what makes the choice reversible. End
+with which option can be turned off, and how.
+
+user:
+Explain {{topic}}.
