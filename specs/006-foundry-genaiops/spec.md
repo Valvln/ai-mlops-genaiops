@@ -72,6 +72,21 @@ proposes is checked against "does it bill at rest", the question
 | Foundry project (subresource of the account) | **no** — subresource, no independent billing | €0.00 | deleted with the account |
 | One model deployment, Standard/GlobalStandard SKU | **no** — meter runs only while a request is in flight, stops when the request ends | €0.00 | `az cognitiveservices account deployment delete` |
 | The dedicated resource group itself | **no** — a resource group has no charge of its own | €0.00 | `az group delete --name <rg> --yes` |
+| Log Analytics workspace (`Microsoft.OperationalInsights/workspaces`) | **no** — consumption only | €0.00 | deleted with the resource group |
+| Application Insights (`Microsoft.Insights/components`) | **no** — consumption only | €0.00 | deleted with the resource group |
+
+The last two rows were added at implementation time, before the resources were
+created, when User Story 3's tracing mechanism turned out to require them
+(they are the trace store — Foundry has no trace store of its own,
+[research.md](./research.md) § R6). Their rates were checked rather than
+assumed: the Azure Retail Prices API for `swedencentral` publishes **no
+per-hour or per-instance meter for either resource type**. Every meter that
+exists is consumption-priced — Log Analytics `Standard Data Analyzed` at
+€2.0208/GB, `Analytics Logs Data Retention` at €0.1142/GB/month beyond the
+free 31 days, Application Insights `Data Retention` at €0.0879/GB/month — so
+an idle workspace ingesting nothing costs nothing, and the first 5 GB/month of
+ingestion is free regardless. This feature emits a handful of spans measured
+in kilobytes.
 
 **Nothing this feature creates bills at rest.** The only cost is tokens actually
 consumed by test calls: at the rates recorded in `foundry-cost-model.md` § 4 for
