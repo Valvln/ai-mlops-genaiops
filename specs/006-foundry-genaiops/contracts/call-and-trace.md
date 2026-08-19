@@ -45,12 +45,19 @@ test and not a restatement of "the call happened").
    the prompt version attribute, the deployment name, and the response
    content.
 
-**Requires**: the querying identity holds `Log Analytics Reader` on the
-Application Insights resource (and `Privileged Monitoring Data Reader` if the
-underlying tables are protected) — per
-[Set Up Tracing for AI Agents in Microsoft Foundry][trace], this is not
-implied by Owner/Contributor on the resource group and may need an explicit
-role assignment during implementation.
+**Requires**: nothing beyond what the author already holds — **verified, and
+not what this contract originally predicted.** It said `Log Analytics Reader`
+was not implied by Owner and might need an explicit assignment. In this
+subscription it is: the first `query_trace.py` run succeeded as Owner, with no
+grant made. Log Analytics query is gated by the control-plane action
+`Microsoft.OperationalInsights/workspaces/query/read`, which Owner's `*`
+covers.
+
+That is not a general licence to assume Owner is sufficient. The same feature
+hit two refusals in the other direction — Cognitive Services inference
+(tasks.md T012a) and Foundry connection reads (T021a) — both **data** actions,
+which Owner does not reach at all. Which plane guards a given API is a fact to
+read off the refusal, not to infer from the strength of the role.
 
 ## Acceptance mapping
 

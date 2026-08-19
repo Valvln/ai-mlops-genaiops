@@ -20,6 +20,13 @@ before it's proposed for a real deployment.
 5. One `Microsoft.Insights/components`, workspace-based against (4).
 6. One `accounts/connections` and one `accounts/projects/connections`, both
    category `AppInsights`, targeting (5).
+7. **Added during implementation, from a refusal — see tasks.md T012a.** One
+   `Microsoft.Authorization/roleAssignments` granting the caller
+   `Cognitive Services OpenAI User` on (1), conditional on a non-empty
+   `callerPrincipalId` parameter. Without it the template deploys
+   infrastructure nobody can call: the first request returned `401
+   PermissionDenied` naming the missing data action, because Owner is a
+   control-plane role and grants nothing on the Cognitive Services data plane.
 
 ## What it MUST NOT create
 
@@ -41,10 +48,21 @@ before it's proposed for a real deployment.
    availability in this subscription).
 4. `az bicep build --file infra/foundry.bicep` — exit 0, no output.
 5. `az deployment group what-if --resource-group rg-ai300-foundry
-   --template-file infra/foundry.bicep` — reviewed by the author before the
-   real run (FR-011); expect 7 creates (the six resources above, the
-   `accounts/projects/connections` counts separately from the account-level
-   one).
+   --template-file infra/foundry.bicep --parameters callerPrincipalId=<oid>` —
+   reviewed by the author before the real run (FR-011). Against an empty
+   resource group, expect **8 creates**: the seven objects above, with the
+   `accounts/projects/connections` counting separately from the account-level
+   one. (Written as 7 before implementation, when the role assignment was not
+   yet known to be necessary.)
+
+   Against a partially deployed group, what-if reports `Modify` on the account
+   and project with `Delete` deltas for `properties.defaultProject`,
+   `properties.associatedProjects`, `kind`, `properties.endpoints`,
+   `properties.internalId` and `properties.isDefault`. **This is noise, and it
+   was checked rather than tolerated**: those are provider-populated fields the
+   template does not declare, what-if reports undeclared properties as
+   deletions in Incremental mode, and all six were read back intact from the
+   live resources after the deployment ran.
 
 ## Post-deployment verification
 
