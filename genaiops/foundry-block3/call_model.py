@@ -1,19 +1,21 @@
 """Send one completion request to the feature 006 Foundry deployment.
 
-User Story 1 only, deliberately: an inline prompt, no tracing, no .prompty
-file. The point of keeping this form first is that it proves the deployment
-answers a call WITHOUT depending on either P2 story existing — which is what
-makes User Story 1 independently testable rather than testable-once-the-rest-
-is-built.
+The prompt comes from a tracked .prompty file, and so do the deployment name
+and the sampling parameters — the file is the source of truth, not just the
+text (FR-006). What used to be an inline literal here is now a thing git can
+show a diff of; see the previous revision of this file for the before.
 
 Usage:
     export AZURE_AI_FOUNDRY_ENDPOINT="https://<account>.cognitiveservices.azure.com/"
-    uv run call_model.py
+    uv run call_model.py [prompts/hello-domain3.prompty]
 """
 
 import os
+import subprocess
 import sys
+from pathlib import Path
 
+import prompty
 from azure.identity import DefaultAzureCredential, get_bearer_token_provider
 from openai import AzureOpenAI
 
@@ -22,20 +24,34 @@ from openai import AzureOpenAI
 # exists the first time this disposable environment is rebuilt.
 ENDPOINT_VAR = "AZURE_AI_FOUNDRY_ENDPOINT"
 
-DEPLOYMENT_NAME = "gpt-4.1-mini"
-
 # Pinned, like the model version in infra/foundry.bicep. An unpinned data-plane
 # API version is a dependency that changes without a commit.
 API_VERSION = "2024-10-21"
 
-# Inline ON PURPOSE at this stage — see the module docstring. Feature 006's
-# User Story 2 replaces this with a tracked .prompty file, and the diff between
-# the two is itself the evidence FR-006 asks for.
-SYSTEM_PROMPT = "You are a concise assistant. Answer in at most three sentences."
-USER_PROMPT = (
-    "Explain the difference between a Standard and a Provisioned model "
-    "deployment in Azure AI Foundry."
-)
+DEFAULT_PROMPT = "prompts/hello-domain3.prompty"
+
+
+def prompt_version(path: Path) -> str:
+    """Identify which revision of the prompt file this call actually used.
+
+    THE `-dirty` SUFFIX IS THE WHOLE POINT OF THIS FUNCTION. `git log -1` alone
+    reports the last commit that touched the file, which is a lie whenever the
+    working tree has uncommitted edits — the call would be attributed to a
+    revision whose content is not what was sent. Feature 006 exists to make a
+    trace answer "which prompt produced this", so an answer that is confidently
+    wrong is worse here than no answer at all.
+    """
+    commit = subprocess.run(
+        ["git", "log", "-1", "--format=%H", "--", str(path)],
+        capture_output=True, text=True, cwd=path.parent,
+    ).stdout.strip()
+    if not commit:
+        return "uncommitted"
+    dirty = subprocess.run(
+        ["git", "status", "--porcelain", "--", str(path)],
+        capture_output=True, text=True, cwd=path.parent,
+    ).stdout.strip()
+    return f"{commit}-dirty" if dirty else commit
 
 
 def main() -> int:
@@ -43,6 +59,24 @@ def main() -> int:
     if not endpoint:
         print(f"{ENDPOINT_VAR} is not set.", file=sys.stderr)
         return 2
+
+    prompt_path = Path(sys.argv[1] if len(sys.argv) > 1 else DEFAULT_PROMPT).resolve()
+    if not prompt_path.is_file():
+        print(f"No prompt file at {prompt_path}", file=sys.stderr)
+        return 2
+
+    prompt = prompty.load(str(prompt_path))
+    # No inputs passed: prompty falls back to the file's own `sample` block, so
+    # a run with no arguments is still reproducible from the file alone.
+    messages = prompty.prepare(prompt)
+
+    # Read from the frontmatter rather than from a constant in this file. If
+    # they disagreed, the prompt file would no longer describe the call it
+    # produces, which is the property FR-006 is actually about.
+    deployment = prompt.model.configuration["azure_deployment"]
+    parameters = dict(prompt.model.parameters)
+
+    version = prompt_version(prompt_path)
 
     # No API key, and none available: infra/foundry.bicep sets
     # disableLocalAuth, so the data plane accepts Entra tokens only. This
@@ -64,15 +98,12 @@ def main() -> int:
     # it here would turn a 401 into a tidy message and lose the one thing worth
     # having — what the service actually said.
     response = client.chat.completions.create(
-        model=DEPLOYMENT_NAME,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": USER_PROMPT},
-        ],
-        max_tokens=200,
-        temperature=0.2, 
+        model=deployment,
+        messages=messages,
+        **parameters,
     )
 
+    print(f"--- prompt: {prompt_path.name} @ {version} ---")
     print("--- response ---")
     print(response.choices[0].message.content)
     print("--- usage ---")
