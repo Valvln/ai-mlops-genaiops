@@ -167,6 +167,22 @@ def main() -> int:
 
         trace_id = format(span.get_span_context().trace_id, "032x")
 
+    # FLUSHED EXPLICITLY, BECAUSE RELYING ON EXIT LOST A SPAN. The first
+    # version of this script ended here and let the batch span processor ship
+    # whatever it had when the interpreter shut down. Two calls were made; one
+    # arrived. Three hours later the workspace still held exactly one
+    # `genaiops.call` record, so this was a loss, not ingestion lag.
+    #
+    # A span queued in a batch processor is not a span that was exported, and
+    # a short-lived CLI process is precisely where that gap opens: the process
+    # is gone long before the next scheduled export. force_flush blocks until
+    # the exporter has actually sent, which is the only version of "traced"
+    # this feature can verify.
+    flushed = trace.get_tracer_provider().force_flush()
+    if not flushed:
+        print("WARNING: the span was not flushed to Application Insights; "
+              "query_trace.py will not find this call.", file=sys.stderr)
+
     print(f"--- prompt: {prompt_path.name} @ {version} ---")
     print("--- response ---")
     print(content)
