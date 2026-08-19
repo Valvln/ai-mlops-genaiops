@@ -94,7 +94,7 @@ rule naming the billing unit. Revision 3 added one about reversibility.
 | Resources created | 4 listed + 1 deployment, 2 connections, 1 role assignment |
 | Ingestion lag, observed | 2–3 minutes |
 | Tokens spent building this | ~1,300 |
-| Cost at rest | €0.00/day — nothing here has a per-hour meter |
+| Cost at rest | **Expected €0.00/day, not yet measured.** The Retail Prices API publishes no per-hour meter for any of these four resource types in `swedencentral` — but that is a price list, not an observation, and SC-006 exists to take the observation. Pending T027 |
 
 `gpt-4.1-mini` is not the model the cost model recommended. `gpt-5-nano` was
 cheaper and undeployable: quota 0 in this subscription. `gpt-4o-mini` was
