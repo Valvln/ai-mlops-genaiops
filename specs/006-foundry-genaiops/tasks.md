@@ -89,9 +89,9 @@ queried.
 ### Implementation for User Story 2
 
 - [X] T013 [P] [US2] Create `genaiops/foundry-block3/prompts/hello-domain3.prompty` with YAML frontmatter (model config) and a prompt body (research.md § R7)
-- [ ] T014 [US2] Commit the prompt file, then edit it and commit again, so real git history exists before it's used for verification (FR-006)
-- [ ] T015 [US2] Modify `call_model.py` (from US1) to accept a `.prompty` file path argument and load the prompt from it, replacing the T011 inline test prompt (contracts/call-and-trace.md — integrates with User Story 1)
-- [ ] T016 [US2] Verify: `git log --follow --oneline -- genaiops/foundry-block3/prompts/hello-domain3.prompty` shows ≥2 revisions (SC-003, User Story 2 Acceptance Scenario 2)
+- [X] T014 [US2] Commit the prompt file, then edit it and commit again, so real git history exists before it's used for verification (FR-006)
+- [X] T015 [US2] Modify `call_model.py` (from US1) to accept a `.prompty` file path argument and load the prompt from it, replacing the T011 inline test prompt (contracts/call-and-trace.md — integrates with User Story 1)
+- [X] T016 [US2] Verify: `git log --follow --oneline -- genaiops/foundry-block3/prompts/hello-domain3.prompty` shows ≥2 revisions (SC-003, User Story 2 Acceptance Scenario 2)
 
 **Checkpoint**: User Stories 1 and 2 both work — the model answers a call made with a prompt that has real, diffable git history.
 
