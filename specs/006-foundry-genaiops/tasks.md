@@ -30,9 +30,9 @@ sibling of `main.bicep`, never merged into it) and
 **Purpose**: Live prerequisites and repository scaffolding — nothing Azure-side
 is created here beyond the resource group.
 
-- [ ] T001 Create the resource group: `az group create --name rg-ai300-foundry --location swedencentral --tags project=ai300-prep environment=learning` (research.md § R5)
-- [ ] T002 [P] Re-verify `gpt-4.1-mini` availability and quota in `swedencentral` — `az cognitiveservices model list -l swedencentral` and `az cognitiveservices usage list -l swedencentral`, confirm `GlobalStandard` SKU and nonzero limit before writing it into the template (FR-004, research.md § R4's re-verification instruction — a model can go from available to deprecated, or from quota to zero, between this plan and implementation)
-- [ ] T003 [P] Scaffold `genaiops/foundry-block3/pyproject.toml` with `uv`, pinning `openai`, `azure-identity`, `prompty`, `opentelemetry-sdk`, `azure-core-tracing-opentelemetry` (plan.md Technical Context)
+- [X] T001 Create the resource group: `az group create --name rg-ai300-foundry --location swedencentral --tags project=ai300-prep environment=learning` (research.md § R5)
+- [X] T002 [P] Re-verify `gpt-4.1-mini` availability and quota in `swedencentral` — `az cognitiveservices model list -l swedencentral` and `az cognitiveservices usage list -l swedencentral`, confirm `GlobalStandard` SKU and nonzero limit before writing it into the template (FR-004, research.md § R4's re-verification instruction — a model can go from available to deprecated, or from quota to zero, between this plan and implementation)
+- [X] T003 [P] Scaffold `genaiops/foundry-block3/pyproject.toml` with `uv`, pinning `openai`, `azure-identity`, `prompty`, `opentelemetry-sdk`, `azure-core-tracing-opentelemetry` (plan.md Technical Context)
 
 **Checkpoint**: Resource group exists; the model choice is reconfirmed live, not trusted from research.md's 2026-08-19 snapshot; the local environment is ready.
 
@@ -46,10 +46,10 @@ this exists.
 
 **⚠️ CRITICAL**: Complete this phase before starting Phase 3, 4, or 5's Azure-touching tasks.
 
-- [ ] T004 Create `infra/foundry.bicep` declaring the Foundry account (`Microsoft.CognitiveServices/accounts`, kind `AIServices`, sku `S0`, `location: 'swedencentral'`) and the Foundry project (`accounts/projects`) per [data-model.md](./data-model.md)'s Infrastructure entities table and [contracts/foundry-deployment.md](./contracts/foundry-deployment.md)
-- [ ] T005 `az bicep build --file infra/foundry.bicep` — confirm exit 0 and no output (constitution Principle V)
-- [ ] T006 `az deployment group what-if --resource-group rg-ai300-foundry --template-file infra/foundry.bicep` — review against [contracts/foundry-deployment.md](./contracts/foundry-deployment.md)'s expected creates (account + project only, at this point) before deploying (FR-011)
-- [ ] T007 `az deployment group create` to deploy the account and project, author-approved (FR-010)
+- [X] T004 Create `infra/foundry.bicep` declaring the Foundry account (`Microsoft.CognitiveServices/accounts`, kind `AIServices`, sku `S0`, `location: 'swedencentral'`) and the Foundry project (`accounts/projects`) per [data-model.md](./data-model.md)'s Infrastructure entities table and [contracts/foundry-deployment.md](./contracts/foundry-deployment.md)
+- [X] T005 `az bicep build --file infra/foundry.bicep` — confirm exit 0 and no output (constitution Principle V)
+- [X] T006 `az deployment group what-if --resource-group rg-ai300-foundry --template-file infra/foundry.bicep` — review against [contracts/foundry-deployment.md](./contracts/foundry-deployment.md)'s expected creates (account + project only, at this point) before deploying (FR-011)
+- [X] T007 `az deployment group create` to deploy the account and project, author-approved (FR-010)
 
 **Checkpoint**: Foundry account and project exist in `rg-ai300-foundry`. User story work can begin.
 
@@ -66,11 +66,12 @@ exist yet.
 
 ### Implementation for User Story 1
 
-- [ ] T008 [US1] Extend `infra/foundry.bicep` with the model deployment (`accounts/deployments`, sku `GlobalStandard`, capacity `1`, model `{format: OpenAI, name: gpt-4.1-mini, version: 2025-04-14}`) per research.md § R4
-- [ ] T009 [US1] `az bicep build` + `az deployment group what-if` + `az deployment group create` to add the deployment to the existing account (contracts/foundry-deployment.md pre/post-deployment checks)
-- [ ] T010 [US1] Verify the deployment's SKU by reading the service — `az cognitiveservices account deployment show -n <account> -g rg-ai300-foundry --deployment-name gpt-4.1-mini --query sku.name` — confirm `GlobalStandard`, never a PTU-family SKU (SC-001, User Story 1 Acceptance Scenario 1)
-- [ ] T011 [US1] Write `genaiops/foundry-block3/call_model.py`: authenticate with `azure-identity`, send one completion request to the `gpt-4.1-mini` deployment using a simple inline test prompt, print the response (contracts/call-and-trace.md § `call_model.py`)
-- [ ] T012 [US1] Run `call_model.py` once; confirm a successful response is returned and attributable to token usage, not a standing charge (SC-002, User Story 1 Acceptance Scenarios 2–3)
+- [X] T008 [US1] Extend `infra/foundry.bicep` with the model deployment (`accounts/deployments`, sku `GlobalStandard`, capacity `1`, model `{format: OpenAI, name: gpt-4.1-mini, version: 2025-04-14}`) per research.md § R4
+- [X] T009 [US1] `az bicep build` + `az deployment group what-if` + `az deployment group create` to add the deployment to the existing account (contracts/foundry-deployment.md pre/post-deployment checks)
+- [X] T010 [US1] Verify the deployment's SKU by reading the service — `az cognitiveservices account deployment show -n <account> -g rg-ai300-foundry --deployment-name gpt-4.1-mini --query sku.name` — confirm `GlobalStandard`, never a PTU-family SKU (SC-001, User Story 1 Acceptance Scenario 1)
+- [X] T011 [US1] Write `genaiops/foundry-block3/call_model.py`: authenticate with `azure-identity`, send one completion request to the `gpt-4.1-mini` deployment using a simple inline test prompt, print the response (contracts/call-and-trace.md § `call_model.py`)
+- [X] T012 [US1] Run `call_model.py` once; confirm a successful response is returned and attributable to token usage, not a standing charge (SC-002, User Story 1 Acceptance Scenarios 2–3)
+- [X] T012a [US1] **Not planned — added from a refusal.** T012's first run returned `401 PermissionDenied` naming the missing data action `Microsoft.CognitiveServices/accounts/OpenAI/deployments/chat/completions/action`: Owner is a control-plane role and grants nothing on the Cognitive Services data plane. Declare a `Cognitive Services OpenAI User` assignment for the caller in `infra/foundry.bicep`, scoped to the account, behind a `callerPrincipalId` parameter — in the template rather than a one-off `az role assignment create`, so it survives the destroy/rebuild cycle this resource group is designed for. The CI role in `infra/ci-identity.bicep` is untouched (FR-012 stays dormant)
 
 **Checkpoint**: User Story 1 is independently functional — deployed, callable, and provably token-billed. This is the MVP.
 
@@ -87,7 +88,7 @@ queried.
 
 ### Implementation for User Story 2
 
-- [ ] T013 [P] [US2] Create `genaiops/foundry-block3/prompts/hello-domain3.prompty` with YAML frontmatter (model config) and a prompt body (research.md § R7)
+- [X] T013 [P] [US2] Create `genaiops/foundry-block3/prompts/hello-domain3.prompty` with YAML frontmatter (model config) and a prompt body (research.md § R7)
 - [ ] T014 [US2] Commit the prompt file, then edit it and commit again, so real git history exists before it's used for verification (FR-006)
 - [ ] T015 [US2] Modify `call_model.py` (from US1) to accept a `.prompty` file path argument and load the prompt from it, replacing the T011 inline test prompt (contracts/call-and-trace.md — integrates with User Story 1)
 - [ ] T016 [US2] Verify: `git log --follow --oneline -- genaiops/foundry-block3/prompts/hello-domain3.prompty` shows ≥2 revisions (SC-003, User Story 2 Acceptance Scenario 2)

@@ -22,14 +22,20 @@ az account show --query "{name:name, id:id}" -o tsv   # confirms the right subsc
 az cognitiveservices model list -l swedencentral \
   --query "[?model.name=='gpt-4.1-mini'].{version:model.version, skus:join(',',model.skus[].name)}" -o table
 
+# Note the spelling: gpt4.1-mini, NOT gpt-4.1-mini. The standard-SKU quota
+# meters drop the hyphen after "gpt" while the batch meters keep it, so
+# filtering on the model's real name matches the GlobalBatch/DataZoneBatch
+# rows ONLY — and those report a healthy 50000 limit for a SKU nobody is
+# deploying. Verified 2026-08-19 during T002.
 az cognitiveservices usage list -l swedencentral \
-  --query "[?contains(name.value,'gpt-4.1-mini')].{name:name.value, limit:limit}" -o table
+  --query "[?contains(name.value,'gpt4.1-mini')].{name:name.value, limit:limit}" -o table
 ```
 
-Expect `GlobalStandard` in the SKU list and a nonzero limit. If either has
-changed since [research.md](./research.md) § R4 was written, stop and re-run
-the model/quota selection in R4 before continuing — do not deploy against a
-stale assumption.
+Expect `GlobalStandard` in the SKU list and a nonzero limit
+(`OpenAI.GlobalStandard.gpt4.1-mini`, observed limit 200 on 2026-08-19). If
+either has changed since [research.md](./research.md) § R4 was written, stop
+and re-run the model/quota selection in R4 before continuing — do not deploy
+against a stale assumption.
 
 ## 2. Create the resource group and deploy
 
