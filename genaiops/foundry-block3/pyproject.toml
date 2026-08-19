@@ -1,0 +1,47 @@
+[project]
+name = "ai300-foundry-block3"
+version = "0.1.0"
+description = "Call and trace harness for feature 006 — one Foundry deployment, a versioned prompt, and a trace retrieved after the fact"
+requires-python = "==3.11.*"
+
+dependencies = [
+    # The Foundry deployment's endpoint is OpenAI-API-compatible, so the
+    # vendor SDK is the client, not an Azure-specific wrapper. AzureOpenAI
+    # from this package is what call_model.py instantiates.
+    "openai>=1.60,<2.0",
+    # No API keys anywhere in this feature. DefaultAzureCredential resolves
+    # the az-CLI login the author is already using, so nothing has to be
+    # stored, rotated, or kept out of git.
+    "azure-identity>=1.19,<2.0",
+    # Loads the .prompty file. The reason this dependency exists at all is
+    # FR-006: the prompt is a tracked file with a parseable format, not a
+    # string literal that git can only see as part of the script.
+    "prompty>=0.1.50",
+
+    # --- Tracing ------------------------------------------------------------
+    # plan.md's Technical Context named opentelemetry-sdk and
+    # azure-core-tracing-opentelemetry. Those two produce spans and let the
+    # Azure SDKs join them, but NEITHER SENDS ANYTHING ANYWHERE — there is no
+    # exporter in that pair. Without one, call_model.py would emit a span,
+    # print a trace id, and query_trace.py would find nothing: exactly the
+    # "a check that passes while proving nothing" failure this repository
+    # keeps rediscovering. azure-monitor-opentelemetry is the distro that
+    # supplies the missing exporter (and configures the SDK in one call).
+    "azure-monitor-opentelemetry>=1.6,<2.0",
+    "opentelemetry-sdk>=1.29",
+    "azure-core-tracing-opentelemetry>=1.0.0b11",
+    # Instruments the openai client itself, so the HTTP call to the
+    # deployment becomes a child span rather than something call_model.py
+    # has to describe by hand.
+    "opentelemetry-instrumentation-openai-v2>=2.0b0",
+
+    # --- Reading traces back ------------------------------------------------
+    # Also absent from plan.md's list, and also load-bearing: query_trace.py
+    # reads the Log Analytics workspace, which needs a query client. Adding
+    # it here rather than shelling out to `az monitor log-analytics query`
+    # keeps the retrieval in the same language as the call.
+    "azure-monitor-query>=1.4,<2.0",
+]
+
+[tool.uv]
+package = false
