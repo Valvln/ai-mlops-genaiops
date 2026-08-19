@@ -115,7 +115,9 @@ its record through a separate invocation.
 - [X] T021 [US3] Instrument `call_model.py` with OpenTelemetry (`opentelemetry-sdk`, `azure-core-tracing-opentelemetry`): resolve the prompt file's current git commit hash and attach it as a span attribute **before** sending the call, export the span to the connected Application Insights resource (contracts/call-and-trace.md § `call_model.py`)
 - [X] T022 [US3] Write `genaiops/foundry-block3/query_trace.py`: query the Log Analytics workspace for a given trace id or time range, print the prompt version, deployment name, and response content read back from the record — never from in-memory state (contracts/call-and-trace.md § `query_trace.py`)
 - [X] T023 [US3] Verify retrieval end-to-end: run `call_model.py`, then — in a separate invocation, ideally a new terminal — run `query_trace.py`; confirm it returns the correct prompt version, deployment, and response (SC-004, User Story 3 Acceptance Scenario 1)
-- [ ] T024 [US3] Verify distinguishability: run `call_model.py` twice against two different prompt revisions (from US2's git history), then `query_trace.py` for both; confirm the two records are distinguishable by prompt version, not merely by timestamp (SC-004 extended, User Story 3 Acceptance Scenario 2)
+- [X] T024 [US3] Verify distinguishability: run `call_model.py` twice against two different prompt revisions (from US2's git history), then `query_trace.py` for both; confirm the two records are distinguishable by prompt version, not merely by timestamp (SC-004 extended, User Story 3 Acceptance Scenario 2)
+
+- [X] T024a [US3] **Not planned — a real defect, found because T024 asked for two records and got one.** The first `call_model.py` ended after its span closed and let the OpenTelemetry batch processor ship whatever it had at interpreter exit. Of two calls, one arrived; three hours later the workspace still held exactly one `genaiops.call` record, so this was a loss and not ingestion lag. A span queued in a batch processor is not a span that was exported, and a short-lived CLI process is where that gap opens — the process is gone long before the next scheduled export. `call_model.py` now calls `force_flush()` and warns if it returns false. Worth noting how close this came to passing unnoticed: T023 had already retrieved a trace successfully, so the tracing looked proven. It took a criterion that demanded **two** records to expose that the mechanism was unreliable rather than working
 
 **Checkpoint**: All three user stories are independently functional. The block's Domain 3 trio — model, versioned prompt, traced call — is demonstrable end to end.
 
@@ -125,8 +127,8 @@ its record through a separate invocation.
 
 **Purpose**: Documentation and the criteria that only make sense once everything above exists.
 
-- [ ] T025 [P] Draft `genaiops/foundry-block3/README.md` — what was built and the observed values, in the first person, for the author's review (constitution Principle IV; Claude drafts, the author edits and commits)
-- [ ] T026 Run [quickstart.md](./quickstart.md) end to end as a final check, from pre-flight through teardown, on a session separate from the one that built each piece
+- [X] T025 [P] Draft `genaiops/foundry-block3/README.md` — what was built and the observed values, in the first person, for the author's review (constitution Principle IV; Claude drafts, the author edits and commits)
+- [X] T026 Run [quickstart.md](./quickstart.md) end to end as a final check, from pre-flight through teardown, on a session separate from the one that built each piece
 - [ ] T027 SC-006 (deferred): the day after deployment, query Cost Management for `rg-ai300-foundry` and confirm €0.00 on any day with zero completion requests — do not treat an absent row as a confirmed zero (spec Edge Cases; `infra/DEPLOY.md` § 4)
 - [ ] T028 SC-007: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain
 
