@@ -204,6 +204,14 @@ Two lines in the runbook turned out to be wrong, and finding out cost nothing bu
 
 Re-reading the work against the documentation instead of against memory turned up a line that had survived two features unchallenged: a comment claiming -1 meant zero failure tolerance, when -1 is in fact the most permissive default there is — wrong on both counts, and never caught because a deployment that never failed could never test a claim about what happens when things fail. I corrected it to 0, labeled it as unverified rather than confirmed, and let three more write-ups join it in docs/exam-notes/ — sweeps, online endpoints, monitoring — each one honest that it is documented, not measured. Monitoring I dropped outright rather than deferred: with no production traffic, it could only compare my own training data against itself and report no drift, a green check proving nothing, the same failure this whole project keeps running into.
 
+### `genaiops/` — a model, a versioned prompt, and a call 
+
+The generative half starts here, and I kept it deliberately small: one token-billed model, a prompt that lives in git instead of in a portal, a call I can retrieve after the terminal that made it is gone. It sits alone in swedencentral, sharing nothing with the northeurope backbone — either can be destroyed without touching the other. A Foundry account and a project, and no hub: a hub would have pulled in the same storage-vault-registry chain that broke my template two features ago.
+
+The permissions were wrong in both directions at once. I expected to need a reader role for traces and nothing to call the model; the subscription said the opposite — Owner carries every control-plane action and no data action, so querying Log Analytics passed on the first try while chat completions came back 401 until I granted a role built for exactly that call. Which plane guards an API, I learned, comes off the refusal, not off how powerful the role sounds. One permission I left refused on purpose: reading the project's own telemetry connection would have meant handing over an entire data plane for a single lookup, a custom role that would outlive the resource group built to leave none — I read the connection string from App Insights instead.
+
+The defect worth keeping showed up in the tracing, not the permissions: my first version let telemetry ship whatever it had at exit, which for a short CLI means most of it never gets sent. Choosing the model taught the smaller version of the same lesson: the catalog says what a region offers, only the quota API says what I can actually deploy, and the cheaper model I'd picked in advance had a quota of zero. One criterion is still open — the measured cost of an idle day — and leaving the group standing overnight to earn that number isn't the "never leave anything running" rule being bent, since there's no compute here to bend it against; it's a number I'm still waiting on Cost Management to confirm.
+
 ### `.github/workflows/` — validation and deployment
 
 **`bicep-validate.yml`** — recompiles every template under `infra/` on every push
@@ -224,7 +232,6 @@ through the exam objectives:
 
 | Folder              | Scope                                        |
 | ------------------- | -------------------------------------------- |
-| `genaiops/`         | Generative AI operationalization             |
 | `qa-observability/` | Quality assurance, monitoring, observability |
 | `rag-optimization/` | Retrieval-augmented generation               |
 
