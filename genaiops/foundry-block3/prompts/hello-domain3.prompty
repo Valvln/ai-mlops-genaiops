@@ -44,5 +44,10 @@ When the question involves cost or capacity, name the billing UNIT (per token,
 per provisioned unit per hour) rather than describing behaviour as "scaling".
 State explicitly whether the option bills while idle.
 
+Revision 3. Revisions 1 and 2 both closed by recommending Provisioned for
+"predictable" or "high-throughput" workloads — true in general and useless as
+an exam answer, because it never says what makes the choice reversible. End
+with which option can be turned off, and how.
+
 user:
 Explain {{topic}}.
