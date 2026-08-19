@@ -43,28 +43,43 @@ against a stale assumption.
 az group create --name rg-ai300-foundry --location swedencentral \
   --tags project=ai300-prep environment=learning
 
+# The object id of whoever will call the deployment. Without it the template
+# deploys infrastructure nobody can call — Owner does not reach the Cognitive
+# Services data plane (tasks.md T012a).
+CALLER_OID="$(az ad signed-in-user show --query id -o tsv)"
+
 az bicep build --file infra/foundry.bicep   # exit 0, no output
 
 az deployment group what-if \
   --resource-group rg-ai300-foundry \
-  --template-file infra/foundry.bicep
-# Review: 7 creates, no PTU SKU, no hub, no AI Search. See
-# contracts/foundry-deployment.md for the exact list.
+  --template-file infra/foundry.bicep \
+  --parameters callerPrincipalId="$CALLER_OID"
+# Review: 8 creates, no PTU SKU, no hub, no AI Search. See
+# contracts/foundry-deployment.md for the exact list — and for why the Modify
+# deltas against a partially deployed group are noise.
 
 az deployment group create \
   --resource-group rg-ai300-foundry \
   --template-file infra/foundry.bicep \
+  --parameters callerPrincipalId="$CALLER_OID" \
   --name ai300-foundry-block3-001
 ```
 
 ## 3. Verify the deployment matches the contract
 
 ```bash
-az resource list -g rg-ai300-foundry --query "[].{name:name, type:type}" -o table
-# Expect exactly the resources in data-model.md's Infrastructure entities table.
+az resource list -g rg-ai300-foundry --query "[].type" -o tsv | sort
+# Expect exactly four, and nothing else (SC-005):
+#   Microsoft.CognitiveServices/accounts
+#   Microsoft.CognitiveServices/accounts/projects
+#   Microsoft.Insights/components
+#   Microsoft.OperationalInsights/workspaces
+
+ACCOUNT="$(az resource list -g rg-ai300-foundry \
+  --resource-type Microsoft.CognitiveServices/accounts --query "[0].name" -o tsv)"
 
 az cognitiveservices account deployment show \
-  --name <foundry account name> -g rg-ai300-foundry \
+  --name "$ACCOUNT" -g rg-ai300-foundry \
   --deployment-name gpt-4.1-mini --query "sku.name" -o tsv
 # Expect: GlobalStandard   (SC-001)
 ```
@@ -73,9 +88,18 @@ az cognitiveservices account deployment show \
 
 ```bash
 cd genaiops/foundry-block3
+
+export AZURE_AI_FOUNDRY_ENDPOINT="https://${ACCOUNT}.cognitiveservices.azure.com/"
+export APPLICATIONINSIGHTS_CONNECTION_STRING="$(az monitor app-insights component show \
+  -g rg-ai300-foundry -a "$(az resource list -g rg-ai300-foundry \
+  --resource-type Microsoft.Insights/components --query '[0].name' -o tsv)" \
+  --query connectionString -o tsv)"
+
 uv run call_model.py prompts/hello-domain3.prompty
 # Prints a response and a trace id. Note the trace id; it is not needed by
 # step 5's script, only by a human confirming step 5 found the right one.
+# The script refuses to run without the connection string rather than making
+# an untraced call that would look identical to a traced one.
 ```
 
 ```bash
@@ -89,10 +113,23 @@ git log --follow --oneline -- prompts/hello-domain3.prompty
 # Close this terminal, or at least don't rely on anything call_model.py
 # printed above still being in scrollback.
 cd genaiops/foundry-block3
-uv run query_trace.py --since 10m
+
+export LOG_ANALYTICS_WORKSPACE_ID="$(az monitor log-analytics workspace show \
+  -g rg-ai300-foundry -n "$(az resource list -g rg-ai300-foundry \
+  --resource-type Microsoft.OperationalInsights/workspaces --query '[0].name' -o tsv)" \
+  --query customerId -o tsv)"
+
+uv run query_trace.py --since 30m
 # Expect: prompt version (a git commit hash), deployment name (gpt-4.1-mini),
 # and the response content, read back from Application Insights — not from
 # memory. (SC-004)
+#
+# Allow 1-3 minutes for ingestion. An empty result is not a proven absence,
+# and the script says so rather than reporting a clean zero.
+#
+# To prove SC-004's second half, run call_model.py once more after editing and
+# committing the prompt, then query again: the two records must differ by
+# prompt version, not merely by timestamp.
 ```
 
 ## 6. Cost check (deferred — see spec's Deferred Criteria)
