@@ -128,9 +128,25 @@ its record through a separate invocation.
 **Purpose**: Documentation and the criteria that only make sense once everything above exists.
 
 - [X] T025 [P] Draft `genaiops/foundry-block3/README.md` — what was built and the observed values, in the first person, for the author's review (constitution Principle IV; Claude drafts, the author edits and commits)
-- [X] T026 Run [quickstart.md](./quickstart.md) end to end as a final check, from pre-flight through teardown, on a session separate from the one that built each piece
-- [ ] T027 SC-006 (deferred): the day after deployment, query Cost Management for `rg-ai300-foundry` and confirm €0.00 on any day with zero completion requests — do not treat an absent row as a confirmed zero (spec Edge Cases; `infra/DEPLOY.md` § 4)
-- [ ] T028 SC-007: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain
+- [X] T026 Run [quickstart.md](./quickstart.md) end to end as a final check, from pre-flight through teardown, on a session separate from the one that built each piece — steps 1 and 3–5 re-run verbatim against the corrected document; step 2's deployment had already run in the same form, steps 6–7 are T027 and T028 below
+
+**T027 and T028 cannot both be satisfied on the deployment day, and the
+conflict is in the criteria rather than in the work.** SC-006 asks for the
+measured cost of **a day with zero completion requests**; 2026-08-19 had six.
+Tearing down on the deployment day would mean no such day ever exists, leaving
+the spec's one cost criterion permanently unmeasurable.
+
+Decided by the author on 2026-08-19: **leave the resource group standing
+overnight, make no further calls, and close both criteria on 2026-08-20.**
+What that costs was checked rather than assumed — the Retail Prices API
+publishes no per-hour or per-instance meter for any of the four resource types
+in `swedencentral`, which is the very claim SC-006 exists to verify by
+measurement. The standing "never leave anything running" rule is a cost rule,
+and there is no compute here and no hourly meter; an idle day is the
+observation, not a lapse.
+
+- [ ] T027 SC-006, on **2026-08-20**: query Cost Management for `rg-ai300-foundry` for 2026-08-19 (a day with calls) and for the idle period since, and confirm €0.00 for the idle day. Do not treat an absent row as a confirmed zero — that is the mistake `infra/DEPLOY.md` § 4 records this project already making once
+- [ ] T028 SC-007, **after T027**: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain. Ordered after T027 because the teardown destroys the subject of the measurement
 
 ---
 
