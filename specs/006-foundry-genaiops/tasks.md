@@ -145,8 +145,45 @@ measurement. The standing "never leave anything running" rule is a cost rule,
 and there is no compute here and no hourly meter; an idle day is the
 observation, not a lapse.
 
-- [ ] T027 SC-006, on **2026-08-20**: query Cost Management for `rg-ai300-foundry` for 2026-08-19 (a day with calls) and for the idle period since, and confirm €0.00 for the idle day. Do not treat an absent row as a confirmed zero — that is the mistake `infra/DEPLOY.md` § 4 records this project already making once
-- [ ] T028 SC-007, **after T027**: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain. Ordered after T027 because the teardown destroys the subject of the measurement
+**Attempted on 2026-08-20. The day with calls is measured; the idle day is not
+yet readable — and establishing that second half took a measurement of its
+own.** Cost Management, scoped to `rg-ai300-foundry`, daily granularity,
+grouped by service and meter, returns for 2026-08-19:
+
+| Meter | EUR |
+| --- | --- |
+| Foundry Models — `gpt 4.1 mini Inp glbl Tokens` | 0.000440 |
+| Foundry Models — `gpt 4.1 mini Outp glbl Tokens` | 0.000599 |
+| Log Analytics — `Analytics Logs Data Ingestion` | 0.000000 |
+| **Total** | **0.001039** |
+
+Six completion requests cost a tenth of a cent, and every line of it is either
+a per-token meter or a free-tier ingestion. No hourly, per-instance or standing
+charge appears for any of the four resource types — the claim SC-006 exists to
+verify, until now supported only by the Retail Prices API's silence and now
+readable on a bill.
+
+For 2026-08-20 the same query returns no rows — and returns none **for the
+entire subscription**, not only for this resource group. The control is
+`rg-ai300-test02`, which stands with seven resources and billed €0.098867 on
+2026-08-18 and €0.146405 on 2026-08-19, one row per day without a gap. Its
+2026-08-20 row is missing too, so nothing has landed for that day at all: this
+is `infra/DEPLOY.md` § 4's 8–24h lag, not a zero. Recorded as **data not
+available**, which is what makes it a deferral rather than the confirmed-zero
+mistake that caution was written about.
+
+A second obstacle is independent of the lag: the query ran at 08:32 CEST, when
+the idle day was eight hours old. Even once its rows land, that is a partial
+day, not "a day with zero completion requests".
+
+Decided by the author on 2026-08-20: **let the resource group stand through the
+whole of 2026-08-20 with no calls, read the complete idle day on 2026-08-21,
+and tear down after.** What the extra day can cost is bounded by the table
+above rather than assumed: with no calls the two token meters have nothing to
+meter, and the only other line was already €0.00.
+
+- [ ] T027 SC-006 — **half measured**. 2026-08-19, the day with six calls, reads €0.001039 with the per-meter breakdown above. The idle-day reading waits for 2026-08-20's rows to land, i.e. 2026-08-21; the absent row was recorded as unavailable and retried, never treated as a zero
+- [ ] T028 SC-007, **after T027**: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain. Ordered after T027 because the teardown destroys the subject of the measurement. Pre-teardown baseline read 2026-08-20, so that "nothing left behind" is a comparison and not an impression: four resources (account, project, Log Analytics workspace, Application Insights component), zero role assignments at the resource group scope, and no custom role definition belonging to this feature — the subscription's only one, `AI300 CI Deployer (rg-ai300-test02)`, is feature 003's. Both system-assigned identities, the account's `7f01355b-d9df-47d9-8c55-b1eff5c1187e` and the project's `3d72fddd-c5f6-4913-bbf5-10a00c20a07b`, hold no assignment at any scope. The role **definition** list is the one to re-read afterwards: this project has already observed that assignments disappear with their principal while definitions outlive the resource group they were scoped to
 
 ---
 
