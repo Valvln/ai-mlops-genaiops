@@ -901,7 +901,8 @@ deletion safe is that this template can rebuild what it describes.
 Every duration below was measured on 2026-08-18, tearing down
 `rg-ai300-test01` (11 resources: workspace, registry, storage, vault, Log
 Analytics, App Insights, a batch endpoint with three deployments) and rebuilding
-into `rg-ai300-test02`.
+into `rg-ai300-test02`. The destroy half was measured a second time on
+2026-08-20, tearing down `rg-ai300-test02` itself.
 
 ### 6.1 Destroy
 
@@ -914,8 +915,18 @@ RG=rg-ai300-test01          # the group being destroyed
 time az group delete --name "$RG" --yes
 ```
 
-**Measured: 317 s (5 min 17 s).** Nothing needs stopping or detaching first; the
-group deletion takes the workspace, the registry and the endpoints together.
+**Measured twice:**
+
+| Date | Group | Resources | Wall clock |
+| --- | --- | --- | --- |
+| 2026-08-18 | `rg-ai300-test01` | 11, incl. a batch endpoint with three deployments | **317 s** (5 min 17 s) |
+| 2026-08-20 | `rg-ai300-test02` | 7: workspace, registry, storage, vault, Log Analytics, App Insights, and the Smart Detection action group Application Insights adds by itself | **255 s** (4 min 15 s) |
+
+Two points, so the first one was a measurement and not an accident: teardown of
+this template lands in the **4–5½ minute** band, and the four resources of
+difference moved it by about a minute. Neither run needed anything stopped or
+detached first; the group deletion takes the workspace, the registry and the
+endpoints together.
 
 Then purge the vault, which is the step that makes the cycle repeatable:
 
@@ -932,7 +943,11 @@ irreversible on a live vault — `az keyvault update --enable-purge-protection
 false` returns `BadRequest`, measured — so `ai300kv2mgou37pfmjou` holds its name
 until **2026-11-16** and `rg-ai300-test01` cannot be recreated before then.
 Vaults created from the current template carry no purge protection and a 7-day
-retention, so the purge succeeds and the name is free in minutes.
+retention, so the purge succeeds and the name is free in minutes — **measured at
+10 s** on 2026-08-20 for `ai300kvmxvtm2okukvmy`, after which
+`az keyvault list-deleted` held only the protected 2026-08-18 vault. Read that
+list before purging and match the name: the two vaults differ only in a suffix,
+and `ai300kv2mgou37pfmjou` is the one that must be left alone.
 
 ### 6.2 What survives a teardown
 
@@ -951,6 +966,17 @@ here.** This runbook expected it to persist at subscription scope with an
 `assignableScopes` entry pointing at a deleted group. It does not:
 `az role definition list --custom-role-only true` came back empty. A rebuild
 must therefore redeploy `ci-identity.bicep`, and cannot skip it.
+
+Confirmed again on 2026-08-20, and this time past the objection that an empty
+list might only mean the definition had become unlistable. `GET` on the
+definition id itself answered `RoleDefinitionDoesNotExist`:
+
+```bash
+az rest --method get --url "https://management.azure.com/subscriptions/<sub>/providers/Microsoft.Authorization/roleDefinitions/<definition guid>?api-version=2022-04-01"
+```
+
+It is a deletion, not a visibility artefact. `specs/006-foundry-genaiops/tasks.md`
+asserted the opposite in T028 and has been corrected against this run.
 
 **Whether the ML workspace name is held is unverified.** This runbook used to
 assert it was. No `deletedWorkspaces` endpoint responded on three API versions,
