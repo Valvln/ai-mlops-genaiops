@@ -182,8 +182,33 @@ and tear down after.** What the extra day can cost is bounded by the table
 above rather than assumed: with no calls the two token meters have nothing to
 meter, and the only other line was already €0.00.
 
-- [ ] T027 SC-006 — **half measured**. 2026-08-19, the day with six calls, reads €0.001039 with the per-meter breakdown above. The idle-day reading waits for 2026-08-20's rows to land, i.e. 2026-08-21; the absent row was recorded as unavailable and retried, never treated as a zero
-- [ ] T028 SC-007, **after T027**: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain. Ordered after T027 because the teardown destroys the subject of the measurement. Pre-teardown baseline read 2026-08-20, so that "nothing left behind" is a comparison and not an impression: four resources (account, project, Log Analytics workspace, Application Insights component), zero role assignments at the resource group scope, and no custom role definition belonging to this feature — the subscription's only one, `AI300 CI Deployer (rg-ai300-test02)`, is feature 003's. Both system-assigned identities, the account's `7f01355b-d9df-47d9-8c55-b1eff5c1187e` and the project's `3d72fddd-c5f6-4913-bbf5-10a00c20a07b`, hold no assignment at any scope. The role **definition** list is the one to re-read afterwards, but not for the reason written here first: this task claimed definitions outlive the resource group they were scoped to, and that is wrong. Tearing down `rg-ai300-test02` on 2026-08-20 took `AI300 CI Deployer (rg-ai300-test02)` with it — `az role definition list --custom-role-only true` returned empty, and a direct lookup of the definition id answered `RoleDefinitionDoesNotExist`, so it is a deletion and not a listing artefact. A definition whose only `assignableScopes` entry is a deleted group does not survive it, as `infra/DEPLOY.md` § 6.2 already recorded. That also retires the baseline above: the subscription now holds no custom role definition at all, so an empty list after this teardown proves nothing about feature 006 by itself
+- [X] T027 SC-006 — **closed 2026-08-22 on the 2026-08-20 reading**. 2026-08-19, six calls: €0.001039, broken down by meter above. 2026-08-20, a full day standing with no calls: no row at all — while `rg-ai300-test02` returns €0.042407 for that same day. The control is what makes the absence readable: the day's data had landed, and this resource group contributed nothing to it. That is the one thing missing from the episode `infra/DEPLOY.md` § 4 records, where an absent row was taken for a zero on a day whose data had simply not arrived. 2026-08-21 stayed unusable — queried at 02:07 CEST on 2026-08-22, no resource group had a row for it, control included — so it was left as "not available" instead of being counted as a second zero. Worth being exact about what the criterion actually obtained: not a €0.00 row but an absence with a control behind it. Cost Management does emit zero-cost rows, 2026-08-19's `Analytics Logs Data Ingestion` being one, so the absence means no usage record was written at all — a stronger claim than a zero-valued row, but one that is inferred rather than displayed. Phrased as "no metered usage on a day with no calls", SC-006 would ask for what the API can actually show
+- [X] T028 SC-007, **after T027**: `az group delete --name rg-ai300-foundry --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources remain. Ordered after T027 because the teardown destroys the subject of the measurement. Pre-teardown baseline read 2026-08-20, so that "nothing left behind" is a comparison and not an impression: four resources (account, project, Log Analytics workspace, Application Insights component), zero role assignments at the resource group scope, and no custom role definition belonging to this feature — the subscription's only one, `AI300 CI Deployer (rg-ai300-test02)`, is feature 003's. Both system-assigned identities, the account's `7f01355b-d9df-47d9-8c55-b1eff5c1187e` and the project's `3d72fddd-c5f6-4913-bbf5-10a00c20a07b`, hold no assignment at any scope. The role **definition** list is the one to re-read afterwards, but not for the reason written here first: this task claimed definitions outlive the resource group they were scoped to, and that is wrong. Tearing down `rg-ai300-test02` on 2026-08-20 took `AI300 CI Deployer (rg-ai300-test02)` with it — `az role definition list --custom-role-only true` returned empty, and a direct lookup of the definition id answered `RoleDefinitionDoesNotExist`, so it is a deletion and not a listing artefact. A definition whose only `assignableScopes` entry is a deleted group does not survive it, as `infra/DEPLOY.md` § 6.2 already recorded. That also retires the baseline above: the subscription now holds no custom role definition at all, so an empty list after this teardown proves nothing about feature 006 by itself
+
+**Executed 2026-08-22, 02:10 CEST.** `az group delete` returned after 1m07s.
+`az group exists` answers `false`, `az resource list -g rg-ai300-foundry`
+answers `ResourceGroupNotFound`, and no role assignment anywhere has a scope
+mentioning the group. The two system-assigned identities are gone from the
+directory rather than merely unassigned: `az role assignment list --assignee`
+now fails with `Cannot find user or service principal in graph database` for
+both principal ids, which is the removal surfacing as an error instead of as an
+empty list — a distinction worth keeping, since an empty list is also what a
+surviving principal with no assignments would return.
+
+**One residue survives, outside the plane SC-007 inspects.**
+`az cognitiveservices account list-deleted` returns `ai300fdrylkcq74thutjeq`
+(`swedencentral`), soft-deleted at `2026-08-22T00:17:31Z` with
+`scheduledPurgeDate` `2026-08-24T00:17:31Z` — a 48-hour hold that expires on
+its own. The account name derives from `uniqueString(resourceGroup().id)`, so
+recreating `rg-ai300-foundry` under the same name before that date collides
+with the held name: the Key Vault trap of `infra/DEPLOY.md`, on a 48-hour clock
+instead of 90 days, and unlike the vault it can be ended early with
+`az cognitiveservices account purge`. SC-007's literal check passes, because
+`az resource list` cannot see a deleted-account registry — which is the lesson
+rather than a pass. A teardown criterion written against `az resource list`
+verifies that the resource group plane is clean and says nothing about the
+per-service soft-delete registries that outlive it. Future teardown criteria in
+this repository should name the registries to check, not only the group.
 
 ---
 
