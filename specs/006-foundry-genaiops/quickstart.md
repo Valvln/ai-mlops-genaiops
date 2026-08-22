@@ -144,15 +144,29 @@ az rest --method post \
   --body '{"type":"ActualCost","timeframe":"Custom","timePeriod":{"from":"<from>T00:00:00Z","to":"<to>T23:59:59Z"},"dataset":{"granularity":"Daily","aggregation":{"total":{"name":"Cost","function":"Sum"}},"grouping":[{"type":"Dimension","name":"ResourceGroupName"}]}}'
 ```
 
-A row for `rg-ai300-foundry` on a day with no calls sent should show a cost
-matching only the (free-tier) Application Insights ingestion from the calls
-already made — not a standing charge. An absent row means no data yet, not a
-confirmed zero (`infra/DEPLOY.md` § 4's caution, restated in this spec's Edge
-Cases).
+On a day with no calls sent, `rg-ai300-foundry` should carry no standing
+charge. What was actually observed (2026-08-20) is **no row at all**, and the
+ingestion meter is billed as *Log Analytics — Analytics Logs Data Ingestion*,
+not as Application Insights: the component is workspace-based, so its data
+lands on the workspace's meter.
+
+An absent row means no data yet, **not** a confirmed zero (`infra/DEPLOY.md`
+§ 4's caution, restated in this spec's Edge Cases). What makes an absence
+readable is a **control**: query a resource group known to be billing on the
+same day. If the control has a row and this group does not, the day's data has
+landed and this group contributed nothing to it. Without that comparison the
+query cannot distinguish zero from missing.
 
 ## 7. Teardown
 
 ```bash
 az group delete --name rg-ai300-foundry --yes
 az resource list -g rg-ai300-foundry   # expect empty / not found (SC-007)
+
+# az resource list is blind to soft-delete: it reports a purged name and a
+# soft-deleted one identically. The Foundry account is soft-deleted for 48h
+# and keeps its name until then, so check the deleted list too, and the
+# authorization objects that are scoped elsewhere.
+az cognitiveservices account list-deleted -o table
+az role definition list --custom-role-only true -o table
 ```
