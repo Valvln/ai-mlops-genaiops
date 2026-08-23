@@ -1,0 +1,20 @@
+{
+  "_comment": [
+    "A response that MUST fail groundedness, so User Story 3 can prove the",
+    "check fires rather than merely that it runs. Hand-authored on purpose",
+    "(research.md § R7): asking a live model to hallucinate on demand is",
+    "neither reliable nor free, and every failed attempt to provoke a bad",
+    "answer would spend real invocations against SC-006's cap. This file",
+    "fails the same way every time, for one judge call.",
+    "",
+    "The first two sentences of the response are supported by the context and",
+    "are there deliberately — a response that is wrong from the first word",
+    "would prove only that the evaluator can spot nonsense. The third sentence",
+    "is the unsupported one: the context gives no percentage, no free tier and",
+    "no 60-second billing granularity. It is the shape of claim that costs",
+    "money precisely because it sounds like it came from a pricing page."
+  ],
+  "query": "I am building a learning environment I will use for a few minutes a day. Which deployment SKU should I choose, and what happens to the bill when I am not using it?",
+  "context": "A model deployment in Azure AI Foundry is created with a SKU that decides how it bills. Standard and GlobalStandard deployments bill per token consumed: no tokens, no charge, and the deployment costs nothing while idle. Provisioned deployments (ProvisionedManaged, GlobalProvisionedManaged and DataZoneProvisionedManaged) reserve throughput in provisioned units and bill for those units by the hour whether or not any request arrives. A provisioned deployment cannot be paused; the only way to stop it billing is to delete it.",
+  "response": "Choose a GlobalStandard deployment. It bills per token consumed, so it costs nothing while idle and you pay only for the few minutes a day you actually use it. Azure also applies an automatic 40% idle-time discount to Standard deployments after the first 30 days, bills them in 60-second increments, and includes a free monthly allowance of 500,000 tokens for learning subscriptions."
+}
