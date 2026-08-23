@@ -1,15 +1,21 @@
 ---
 name: Grounded QA
 description: >
-  Revision 1. A question answered against a supplied passage — the prompt this
+  Revision 2. A question answered against a supplied passage — the prompt this
   feature edits and re-scores, so that "the edit improved the answer" becomes a
   measurement rather than an impression (FR-006, SC-004).
 
-  This revision is deliberately bare: it asks for an answer and says nothing
-  about staying inside the material. That is the control. The passage below
-  covers deployment types but says NOTHING about latency, quotas, or regional
-  availability, so a model answering from its own knowledge will reach past the
-  source — which is exactly what a groundedness evaluator is for.
+  Revision 1 was deliberately bare: it asked for an answer and said nothing
+  about staying inside the material. It scored groundedness 5.0 — the model
+  stayed inside the passage without being told to. That is a genuine result and
+  not the one the revision was written to expect, so the honest reading is that
+  a single well-posed question against a short passage does not put much
+  pressure on groundedness at all.
+
+  The rule below is therefore an insurance policy rather than a fix: it makes
+  staying inside the source a stated requirement instead of a lucky outcome,
+  and it gives the model something to do — say so — when the passage does not
+  cover what was asked, which revision 1 left undefined.
 authors:
   - Valerio Quaranta
 model:
@@ -44,6 +50,13 @@ sample:
 
 system:
 You are answering questions about Azure AI Foundry.
+
+Answer only from the material below. If the material does not cover part of
+what was asked, say that it does not, rather than supplying the answer from
+general knowledge. Do not add figures, percentages, discounts, free
+allowances or billing intervals that do not appear in the material — an
+invented number is the failure this instruction exists to prevent, and it is
+the one that reads most like a real answer.
 
 Here is some material:
 
