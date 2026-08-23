@@ -1,0 +1,66 @@
+---
+name: Grounded QA
+description: >
+  Revision 2. A question answered against a supplied passage — the prompt this
+  feature edits and re-scores, so that "the edit improved the answer" becomes a
+  measurement rather than an impression (FR-006, SC-004).
+
+  Revision 1 was deliberately bare: it asked for an answer and said nothing
+  about staying inside the material. It scored groundedness 5.0 — the model
+  stayed inside the passage without being told to. That is a genuine result and
+  not the one the revision was written to expect, so the honest reading is that
+  a single well-posed question against a short passage does not put much
+  pressure on groundedness at all.
+
+  The rule below is therefore an insurance policy rather than a fix: it makes
+  staying inside the source a stated requirement instead of a lucky outcome,
+  and it gives the model something to do — say so — when the passage does not
+  cover what was asked, which revision 1 left undefined.
+authors:
+  - Valerio Quaranta
+model:
+  api: chat
+  configuration:
+    type: azure_openai
+    # Endpoint deliberately absent, same as block 3's prompt: it carries
+    # uniqueString(resourceGroup().id), so pinning it here would break this
+    # file the first time the disposable resource group is rebuilt.
+    azure_deployment: gpt-4.1-mini
+  parameters:
+    max_tokens: 200
+    temperature: 0.2
+sample:
+  # evaluate_call.py reads `context` from this block and hands it to the
+  # groundedness evaluator as the source the answer is checked against. A
+  # prompt without it cannot be scored for groundedness at all.
+  context: >
+    A model deployment in Azure AI Foundry is created with a SKU that decides
+    how it bills. Standard and GlobalStandard deployments bill per token
+    consumed: no tokens, no charge, and the deployment costs nothing while
+    idle. Provisioned deployments (ProvisionedManaged, GlobalProvisionedManaged
+    and DataZoneProvisionedManaged) reserve throughput in provisioned units and
+    bill for those units by the hour whether or not any request arrives. A
+    provisioned deployment cannot be paused; the only way to stop it billing is
+    to delete it.
+  question: >
+    I am building a learning environment I will use for a few minutes a day.
+    Which deployment SKU should I choose, and what happens to the bill when I
+    am not using it?
+---
+
+system:
+You are answering questions about Azure AI Foundry.
+
+Answer only from the material below. If the material does not cover part of
+what was asked, say that it does not, rather than supplying the answer from
+general knowledge. Do not add figures, percentages, discounts, free
+allowances or billing intervals that do not appear in the material — an
+invented number is the failure this instruction exists to prevent, and it is
+the one that reads most like a real answer.
+
+Here is some material:
+
+{{context}}
+
+user:
+{{question}}

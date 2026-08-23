@@ -117,6 +117,17 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
   parent: foundryAccount
   name: foundryProjectName
   location: location
+  // FIRST LINK OF A CHAIN THAT EXISTS ONLY TO STOP ARM WORKING IN PARALLEL.
+  // Every child of a Cognitive Services account mutates the account, and Azure
+  // serializes those writes and rejects the loser with RequestConflict. Nothing
+  // here reads the model deployment; the dependency is purely an ordering
+  // constraint. See findings.md § F1 — and note the first attempt at this fix
+  // ordered the project against the CONNECTION only, whereupon the project
+  // raced the DEPLOYMENT instead. The pairs are not the point; the parallelism
+  // is, so the children are chained one after another rather than paired up.
+  dependsOn: [
+    modelDeployment
+  ]
   identity: {
     type: 'SystemAssigned'
   }
@@ -172,11 +183,20 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
     // that cannot be paused and can only be stopped by deleting the
     // deployment (foundry-cost-model.md § 3b).
     name: 'GlobalStandard'
-    // Units of 1000 tokens/minute, against a subscription limit of 200. One
-    // is the floor, and a rate limit is not a spending limit: capacity caps
-    // how fast tokens can be consumed, not how many. What keeps the bill
-    // small is the handful of calls this feature makes, not this number.
-    capacity: 1
+    // Units of 1000 tokens/minute, against a subscription limit of 200. A
+    // rate limit is not a spending limit: capacity caps how fast tokens can
+    // be consumed, not how many. What keeps the bill small is the handful of
+    // calls these features make, not this number — raising it costs nothing
+    // at rest on a per-token SKU, where capacity is a throttle rather than
+    // the reserved floor it would be on a provisioned one.
+    //
+    // WAS 1, AND ONE WAS TOO FEW TO RUN AN EVALUATOR. Measured 2026-08-23
+    // (specs/007-genai-eval-observability/findings.md § F3): capacity 1 buys
+    // ONE REQUEST PER MINUTE, not just 1000 tokens per minute. Block 3 never
+    // noticed because its calls were manual and minutes apart. Block 4 scores
+    // a response by calling a judge model, so it makes at least two calls per
+    // scored answer and 429s on contact.
+    capacity: 10
   }
   properties: {
     model: {
@@ -281,6 +301,24 @@ var appInsightsConnectionName = '${foundryAccountName}-appinsights'
 resource accountAppInsightsConnection 'Microsoft.CognitiveServices/accounts/connections@2025-04-01-preview' = {
   parent: foundryAccount
   name: appInsightsConnectionName
+  // SERIALIZED AGAINST THE PROJECT ON PURPOSE, AND NOT BECAUSE IT READS
+  // ANYTHING FROM IT. Both this connection and the project are children of the
+  // account and both mutate it, so ARM issues them concurrently and Azure
+  // rejects whichever loses:
+  //
+  //   RequestConflict — Another operation is in progress on the resource
+  //   '.../accounts/ai300fdry...'
+  //
+  // Measured 2026-08-23 (findings.md § F1), on this file unchanged, when the
+  // project lost. Feature 006 deployed the same template cleanly on
+  // 2026-08-19 — the race simply resolved the other way. Neither
+  // `az bicep build` nor `what-if` can see this: both describe the desired
+  // state, and the defect is in the order the writes are attempted.
+  //
+  // Third link in the chain: account -> deployment -> project -> here.
+  dependsOn: [
+    foundryProject
+  ]
   properties: {
     category: 'AppInsights'
     target: applicationInsights.id
@@ -302,9 +340,31 @@ resource accountAppInsightsConnection 'Microsoft.CognitiveServices/accounts/conn
   }
 }
 
+// NAMED DIFFERENTLY FROM ITS ACCOUNT-LEVEL SIBLING, AND THAT IS THE FIX.
+// Giving both the same name is what made this template one-shot: a project is
+// projected as an AML workspace that shares the account's connection
+// namespace, so the second of the two to be created collides with the first —
+//
+//   UserError — Connection ai300fdry...-appinsights already exist, and can only
+//   be updated by the workspace that created it, which is the workspace with
+//   workspaceId: .../Microsoft.MachineLearningServices/workspaces/...@AML
+//
+// Feature 006 did not hit this because the race in F1 happened to create the
+// project-level one first; once F1's chain fixed the ordering, the collision
+// surfaced every run (findings.md § F2). The names are now distinct, so
+// neither connection can be mistaken for the other's prior version.
+var projectAppInsightsConnectionName = '${appInsightsConnectionName}-project'
+
 resource projectAppInsightsConnection 'Microsoft.CognitiveServices/accounts/projects/connections@2025-04-01-preview' = {
   parent: foundryProject
-  name: appInsightsConnectionName
+  name: projectAppInsightsConnectionName
+  // Last link in the chain. Being a child of the project already orders this
+  // after the project, but not after the account-level connection — which is
+  // its sibling in everything that matters to ARM, and its rival for the same
+  // account-level lock.
+  dependsOn: [
+    accountAppInsightsConnection
+  ]
   properties: {
     category: 'AppInsights'
     target: applicationInsights.id
