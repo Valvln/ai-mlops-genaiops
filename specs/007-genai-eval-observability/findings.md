@@ -10,10 +10,24 @@ sound. That is the point of writing them down separately from `research.md`:
 research recorded what was decided **before** building, and these are what
 building disproved.
 
-**Status: all open.** F1–F3 are `infra/foundry.bicep` changes, deliberately not
-made in this session — the plan says the template ships unchanged, and altering
-it is a scope decision for the author, not a side effect of debugging. F6 is
-unresolved and blocks this feature's central claim.
+**Status, updated 2026-08-23 evening**: F1, F2, F3, F7 and F8 are **fixed and
+verified**. F4 is worked around. F5 is resolved in code. **F6 is still open**,
+and is now the only thing between this feature and a complete verification —
+the fresh workspace F8's fix produced did *not* cure it, which disproved the
+hypothesis this document carried for most of the day.
+
+The template fixes were made after the author authorised them ("we'll fix it
+before finishing the block"), and each was proven by deployment rather than by
+`az bicep build`, which could see none of them:
+
+| Run | Template | Result |
+| --- | --- | --- |
+| `block4-001` | unchanged | Failed — F1, project lost the race |
+| `block4-002` | unchanged, re-run | Failed — F2, connection not re-deployable |
+| `block4-fixed-001` | `dependsOn` project→connection | Failed — project raced the *deployment* instead |
+| `block4-fixed-002` | full chain | Failed — F2 proper: both connections shared a name |
+| `block4-fixed-003` | distinct connection names | **Succeeded** |
+| `block4-fixed-004` | same template, second run | **Succeeded — idempotent** |
 
 ---
 
@@ -48,8 +62,13 @@ that works when the ordering is lucky is not a validated template — this is th
 gap between `az bicep build` and a deployment that `CLAUDE.md` already warns
 about, showing up in a form neither the build nor `what-if` can see.
 
-**Fix, when authorized**: an explicit `dependsOn` from the project to the
-account-level connection (or vice versa) to force serialization.
+**Fixed, and the first attempt was wrong in an instructive way.** Adding a
+single `dependsOn` between the project and the account-level connection moved
+the race rather than removing it: the next run failed with the project losing
+to the **model deployment**. The pairs were never the point. *Every* child of a
+Cognitive Services account contends for the same account-level lock, so the
+template now chains all four in sequence — account → deployment → project →
+account connection → project connection. Verified by `block4-fixed-003`.
 
 ---
 
@@ -78,11 +97,22 @@ constraint). The `2025-04-01-preview` API version on these two connections was
 already flagged in feature 006's plan as **not fully pre-verified**. This is
 what that flag was worth.
 
-**Fix, when authorized**: make the connections conditional on creation, or drop
-them. Worth asking whether they earn their place at all: `call_model.py` reads
-the App Insights connection string directly from the component and never
-touches these connections, precisely because reading them needs a data action
-neither Owner nor `Cognitive Services OpenAI User` carries.
+**Fixed, and the cause was simpler than the error suggested.** The two
+connections were declared with the *same name*. A project is projected as an
+AML workspace sharing the account's connection namespace, so whichever was
+created second collided with the first and was refused as an unauthorised
+update. Feature 006 never saw it because F1's race happened to create the
+project-level one first; the moment F1's chain fixed the ordering, the
+collision became deterministic. The project-level connection now carries a
+`-project` suffix. Verified by `block4-fixed-004`, a second consecutive
+deployment that succeeded — the idempotency this template did not previously
+have.
+
+Worth noting for later: neither connection is read by anything in this
+repository. `call_model.py` takes the App Insights connection string from the
+component directly, because reading a connection needs a data action neither
+Owner nor `Cognitive Services OpenAI User` carries. They are portal wiring, and
+they cost two deployment failures to keep.
 
 ---
 
@@ -223,22 +253,120 @@ indistinguishable from FR-008's genuine absence case, which is exactly the
 confusion this feature exists to prevent. Until F6 is resolved, T013, T014,
 T020 and T025 cannot be honestly verified.
 
-**Leading hypothesis, untested**: `azure-ai-evaluation` runs its evaluators
-through a bundled legacy promptflow tracing layer, which configures its own
-OpenTelemetry provider. If it replaces the global provider after
-`configure_azure_monitor()` installed one, then `trace.get_tracer_provider()
-.force_flush()` flushes a provider that never held the span — returning true
-having exported nothing. That would explain a true return with no delivery, and
-it is the same class of bug as block 3's original lost span, one layer up. It
-does not explain the lost `genaiops.call`, which runs block 3's unmodified
-script, so there may be two causes.
+### Diagnosed, same day, 19:45–20:00 — and the client is innocent
 
-**The cheapest next step is free and already running**: re-query the workspace
-after several hours. If the missing spans have appeared, this is ingestion lag
-of an unexpected magnitude and the finding shrinks to "the 1–3 minute figure in
-`query_trace.py` is wrong." If they are still absent, they were never exported,
-and the flush path needs instrumenting — starting by printing the tracer
-provider's identity before and after the evaluator call.
+The re-query settled the lag question first: **11 hours later, still three
+spans.** Not lag. Then four tests, in order, each eliminating a suspect.
+
+**1. The leading hypothesis was wrong.** `azure-ai-evaluation` does *not*
+replace the tracer provider. Printing the provider's identity at four points —
+before `configure_azure_monitor`, after it, after importing the evaluators,
+after constructing one — gives the same object and the same four span
+processors throughout (`id=4520623056`, `processors=4`). The bundled promptflow
+tracing never touches the global provider. Recorded because a plausible,
+well-reasoned hypothesis that turns out to be false is worth as much as a
+confirmed one, and cheaper to re-derive wrongly later than to look up here.
+
+**2. It is not sampling or a cap.** The component reports
+`samplingPercentage: null`, `DailyCap: null`; the workspace reports
+`dailyQuotaGb: -1`.
+
+**3. It is not the code under test.** Five probe processes — no evaluator, no
+model call, just `configure_azure_monitor` → one span → `force_flush` — behave
+identically: `force_flush=True`, nothing arrives. Structurally the same as
+`call_model.py`, which worked at 08:33 and stopped working by 09:00.
+
+**4. Application Insights is accepting the data.** Running a probe with the
+exporter's own logging on:
+
+```text
+POST //v2.1/track HTTP/1.1" 200
+Transmission succeeded: Item received: 8. Items accepted: 8
+```
+
+An HTTP 200 and an explicit per-item acknowledgement. **`force_flush` was
+honest, the exporter did its job, and the ingestion endpoint accepted every
+item.** The spans were exported and acknowledged, and then did not appear.
+
+**Where the gap actually is**: between Application Insights accepting an item
+and the Log Analytics workspace surfacing it as a queryable row. That is
+server-side, and nothing in this repository can fix it. The evidence that it is
+table-specific rather than total:
+
+| Table | Latest row (queried 19:54) |
+| --- | --- |
+| `AppMetrics` | **19:48:56** — from the probe processes minutes earlier |
+| `AppPerformanceCounters` | **19:48:55** — likewise |
+| `AppDependencies` | **09:00:56** — nothing for 11 hours |
+
+Telemetry from the same processes, over the same connection string, in the same
+minute: metrics land, dependencies do not. Custom spans are dependencies.
+
+### The F6 hypothesis was tested and is wrong
+
+The obvious suspect was F8: the workspace had been restored from soft-delete
+rather than created, so an incomplete restore would explain a half-working
+ingestion pipeline. It was testable, and it was tested — teardown with
+`--force`, redeploy, verify `createdDate` is today and the `customerId` is new,
+then re-run everything against a workspace that had never existed before.
+
+**The loss reproduced exactly.** Of roughly eleven `genaiops.*` spans emitted
+into the fresh workspace, three arrived:
+
+| Emitted | Arrived |
+| --- | --- |
+| `genaiops.call` × 6 | 2 |
+| `genaiops.eval` × 5 | 1 |
+
+Recorded here because a disproved hypothesis is worth as much as a confirmed
+one, and this one was expensive: it drove a full teardown and redeploy. That
+work was not wasted — F8 is real, and F1/F2/F3 were fixed and proven along the
+way — but it did not touch F6.
+
+### What is actually known
+
+- **The client is not at fault.** `force_flush()` returns true; the exporter
+  logs `HTTP 200` and `Transmission succeeded: Item received: 8. Items
+  accepted: 8`. Application Insights accepts every item.
+- **It is not the evaluation SDK.** The tracer provider is never replaced
+  (same object, same four processors, checked at four points), and block 3's
+  unmodified `call_model.py` loses spans at the same rate as `evaluate_call.py`.
+- **It is not sampling as configured.** `samplingPercentage: null`,
+  `DailyCap: null`, `dailyQuotaGb: -1`.
+- **It is not the workspace's history.** Reproduced on a workspace minutes old.
+- **It is not another table.** `AppRequests` is empty; the spans are nowhere.
+- **Child spans survive when their parent does not.** In a lost run, the
+  auto-instrumented token requests arrive under the very `OperationId` whose
+  root span is missing. Whatever drops these is selecting *within* a batch that
+  was acknowledged as fully accepted.
+- **The early spans of a session survive; later ones do not.** The first two
+  calls into a brand-new component landed; almost nothing after did. That shape
+  — fine at first, then lossy — is what an adaptive, service-driven sampler
+  looks like from the client side, and the SDK is observably fetching
+  `AzMonSDKDynamicConfiguration` from the live-metrics endpoint. **Untested**,
+  and named here as the next thing to try, not as a conclusion.
+
+### What it costs this feature
+
+- **SC-002 is verified**, but only because a retained eval span was caught:
+  `query_evaluations.py --trace-id` returned the joined record — prompt version
+  `4b0d037`, deployment, relevance 5.0 against threshold 3, `pass`, the judge's
+  reasoning, and the response — from a separate invocation. The mechanism is
+  proven; the store it depends on is not reliable.
+- **FR-008 is verified**: an unscored call is reported as an absence in words.
+- **T020 and T025 are not verified.** Both need specific records to survive
+  ingestion, and repeated attempts did not land one. The evaluations themselves
+  ran correctly every time — groundedness 5.0 `pass` on a grounded answer, 4.0
+  `fail` on the fixture, reproducibly — so what is unproven is retrieval of
+  those particular records, not the scoring behind them.
+- **SC-006's counter under-reports, and this is the sharpest lesson here.**
+  `--count-invocations` returned **3** for a session that made roughly **13**
+  model calls. The count is deliberately derived from the trace store rather
+  than a side tally, on the principle that a second source of truth drifts —
+  and that principle is still right. But it means the cost guardrail inherits
+  the trace store's losses, and it fails *toward under-reporting*: the
+  flattering direction. A budget check that silently reads low is worse than
+  none, and that is worth carrying into any future cost control built this way.
 
 ---
 
@@ -253,3 +381,52 @@ Not an error and not empty — a plausible wrong answer, recorded onto a span as
 fact. `call_model.py` avoided it by resolving the path first; this script did
 not. Fixed by resolving inside `prompt_version()` itself, so no caller can
 reintroduce it.
+
+---
+
+## F8 — The "disposable" environment is not disposable: the workspace came back with its old data
+
+**Severity**: undermines a premise the whole feature is built on, and is the
+prime suspect behind F6.
+
+`az resource list` after the redeploy showed the expected four resources, and
+T008 passed. But the Log Analytics workspace reports:
+
+```json
+{ "created": "2026-08-19T08:29:31Z", "modified": "2026-08-23T08:28:44Z" }
+```
+
+**Created on 2026-08-19** — feature 006's deployment date. Today's deploy did
+not create a workspace; it *restored* feature 006's, which `az group delete`
+had only soft-deleted. Querying with no time filter proves the data came back
+with it:
+
+```text
+genaiops.call | n = 5 | 2026-08-19 08:37:14 -> 2026-08-23 08:34:54
+```
+
+Five call spans, the earliest from four days ago and three days after the
+resource group was supposedly destroyed.
+
+**Why this matters beyond tidiness**:
+
+- **It is a second soft-delete trap, and worse-behaved than R1's.** The
+  Cognitive Services hold *failed loudly* and forced the explicit purge that
+  became T001. A Log Analytics workspace inside its recovery window is restored
+  **silently, and reported as a successful create.** A trap that fails is a
+  trap you handle once; a trap that succeeds wrongly is one you never notice.
+- **It weakens SC-001's redeployment-as-proof claim.** "The template recreated
+  what it describes" is exactly what a restore imitates. `az resource list`
+  cannot tell the two apart — only `createdDate` can, and neither T008 nor
+  `contracts/foundry-redeployment.md` step 8 thought to look.
+- **It contaminates any measurement scoped by resource, not by time.** SC-006's
+  invocation cap counts spans in the trace store; feature 006's three calls are
+  now in that store. The `--since` window happens to exclude them, which is
+  luck, not design.
+- **It is the leading explanation for F6.**
+
+**Fix, when authorized**: teardown must delete the workspace explicitly with
+`az monitor log-analytics workspace delete --force true` before or after
+`az group delete`, exactly as T001 purges the Foundry account — and T008 should
+assert `createdDate` is today, so a restore can never again be mistaken for a
+create.
