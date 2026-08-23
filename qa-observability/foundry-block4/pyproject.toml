@@ -1,0 +1,44 @@
+[project]
+name = "ai300-foundry-block4"
+version = "0.1.0"
+description = "Evaluation harness for feature 007 — a call scored by an evaluator, and the score retrieved after the fact"
+requires-python = "==3.11.*"
+
+dependencies = [
+    # The evaluators themselves. Pinned below 2.0 because the pass/fail
+    # contract this feature reads — the `*_result` and `*_threshold` fields
+    # evaluate_call.py records verbatim rather than recomputing — is a 1.x
+    # surface. A major bump is allowed to change it, and this feature's
+    # records would silently start meaning something else.
+    "azure-ai-evaluation>=1.18,<2",
+
+    # No API keys anywhere in this feature either. infra/foundry.bicep sets
+    # disableLocalAuth, so the judge model is reached the same way block 3
+    # reaches the model under test: omit api_key from the model config and
+    # let the SDK fall back to DefaultAzureCredential (research.md § R3).
+    "azure-identity>=1.19,<2.0",
+
+    # Reconstructing what was asked. The genaiops.call span records which
+    # prompt FILE at which REVISION produced a response, not the rendered
+    # question — so evaluate_call.py loads that file to recover the query it
+    # has to hand the evaluator. Same loader block 3 used to send it, which
+    # is the only reason the reconstruction can be trusted.
+    "prompty>=0.1.50",
+
+    # --- Tracing ------------------------------------------------------------
+    # An evaluation that is not retrievable afterwards proves nothing this
+    # feature claims, so the eval record is a span like any other, exported
+    # by the same distro block 3 learned it needed (its pyproject carries the
+    # long version of why opentelemetry-sdk alone sends nothing anywhere).
+    "azure-monitor-opentelemetry>=1.6,<2.0",
+    "opentelemetry-sdk>=1.29",
+
+    # --- Reading traces back ------------------------------------------------
+    # Both directions need this one: evaluate_call.py reads the genaiops.call
+    # record it is about to score, and query_evaluations.py reads the
+    # genaiops.eval record it wrote.
+    "azure-monitor-query>=1.4,<2.0",
+]
+
+[tool.uv]
+package = false
