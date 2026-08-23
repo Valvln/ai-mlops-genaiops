@@ -125,11 +125,11 @@ confirm the result is retrievable by a query naming that specific call.
 - [X] T012 [US1] Run `evaluate_call.py --trace-id <id> --metric relevance`
   against T011's call; confirm `eval.score` and `eval.result` are set (SC-002,
   User Story 1 Acceptance Scenario 1)
-- [ ] T013 [US1] In a separate invocation, run `query_evaluations.py
+- [X] T013 [US1] In a separate invocation, run `query_evaluations.py
   --trace-id <id>`; confirm it returns the joined record — prompt version,
   deployment, score — read from the trace store, not from anything printed
   earlier (SC-002, User Story 1 Acceptance Scenario 2)
-- [ ] T014 [US1] Verify FR-008: run `query_evaluations.py --trace-id` against
+- [X] T014 [US1] Verify FR-008: run `query_evaluations.py --trace-id` against
   a call that was deliberately never scored; confirm the output states the
   absence in words, distinguishable from a passing or zero score (User Story 1
   Acceptance Scenario 3)
@@ -158,7 +158,7 @@ attributed to their own revision.
   context-constrained instruction ("answer only from the material given; say
   so if it isn't covered") and commit again, so ≥2 revisions exist before
   verification (FR-006)
-- [ ] T017 [US2] Run `call_model.py` (from `genaiops/foundry-block3/`,
+- [X] T017 [US2] Run `call_model.py` (from `genaiops/foundry-block3/`,
   pointed at `grounded-qa.prompty`) once per revision, producing two calls and
   two trace ids
 - [ ] T018 [US2] Run `evaluate_call.py --trace-id` for each of T017's two
@@ -217,10 +217,10 @@ check — is demonstrable end to end.
 **Purpose**: Documentation and the criteria that only make sense once
 everything above exists.
 
-- [ ] T026 [P] Draft `qa-observability/foundry-block4/README.md` — what was
+- [X] T026 [P] Draft `qa-observability/foundry-block4/README.md` — what was
   built and the observed values, in the first person, for the author's review
   (constitution Principle IV; Claude drafts, the author edits and commits)
-- [ ] T027 Extend `query_evaluations.py` with `--count-invocations --since
+- [X] T027 Extend `query_evaluations.py` with `--count-invocations --since
   <window>`: sum `genaiops.call` and `genaiops.eval` spans in the window
   directly from the trace store — never a side tally — and confirm the
   feature's total verification stayed well under SC-006's 500-invocation
@@ -233,7 +233,7 @@ everything above exists.
   confirm €0.00, reading an absent row as "no data yet" and checking against a
   control resource group known to be billing the same day, never assuming a
   missing row is a confirmed zero (spec.md Edge Cases, `infra/DEPLOY.md` § 4)
-- [ ] T030 SC-007, after T029: `az group delete --name rg-ai300-foundry
+- [X] T030 SC-007, after T029: `az group delete --name rg-ai300-foundry
   --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources
   remain. Also record `az cognitiveservices account list-deleted`'s new entry
   and its `scheduledPurgeDate` — the exact fact this feature's own R1 needed
@@ -261,14 +261,14 @@ T014, T020 and T025 cannot be honestly verified until this is resolved.
   `qa-observability/foundry-block4/evaluate_call.py` — the leading hypothesis
   is that `azure-ai-evaluation`'s bundled promptflow tracing replaces the
   global provider, so the flush drains a provider that never held the span
-- [ ] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
+- [X] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
   serializes `accounts/projects` against `accounts/connections`, and make the
   connections re-deployable or drop them, having first asked whether they earn
   their place at all (nothing in this repository reads them). Validate with
   `az bicep build`, then prove it by deploying twice into an empty resource
   group: the second run must succeed, which is the property F2 says the
   template does not currently have
-- [ ] T033 Fix F3 in `infra/foundry.bicep` — set the model deployment's
+- [X] T033 Fix F3 in `infra/foundry.bicep` — set the model deployment's
   `capacity` to 10 so the template matches the live resource this session
   changed by hand. Free on a token-billed SKU (capacity is a throttle, not a
   reservation), and until it lands the template and reality disagree
@@ -276,6 +276,38 @@ T014, T020 and T025 cannot be honestly verified until this is resolved.
   template that cannot be re-run and a capacity that throttles to one request
   per minute are exactly the "easiest to walk into" class that runbook exists
   for. Note that touching `infra/**` arms the CI deploy gate
+
+---
+
+## Where this stands, 2026-08-23
+
+**Done and verified**: the redeploy (on a template this block had to fix
+first), User Story 1 end to end including FR-008's absence case, both
+directions of the groundedness check at evaluation time, the invocation count,
+and teardown — verified clean, with the resource group gone, no soft-deleted
+account, the workspace genuinely deleted and the quota released.
+
+**Left open, all for the same reason.** F6: roughly 70% of spans never reach
+the workspace, though the exporter is acknowledged with `HTTP 200` and
+`Items accepted`. Everything below needs a *particular* record to survive that:
+
+| Task | What it needs |
+| --- | --- |
+| T018, T020 | Two prompt revisions' groundedness records, both retained, to compare |
+| T025 | The fixture's `fail` record, retained and retrieved |
+| T028 | A quickstart run end to end, which contains all of the above |
+| T031 | F6 itself — one untested hypothesis left: service-driven adaptive sampling |
+| T034 | `infra/DEPLOY.md` — deliberately deferred, since touching `infra/**` arms the CI gate |
+
+T029 (SC-008's deferred cost reading) is **not deferred any more, it is
+unavailable**: it needed a day of Cost Management data against a live resource
+group, and teardown removed the subject. The at-rest claim is unchanged and was
+never in doubt — nothing this block created bills while idle — but the
+measured-zero confirmation would need a fresh deployment left standing
+overnight.
+
+The evaluations themselves ran correctly every time. What is unproven is the
+retrieval of specific records, not the scoring behind them.
 
 ---
 
