@@ -85,15 +85,41 @@ EVALUATORS = {
     "relevance": RelevanceEvaluator,
 }
 
+# THE SDK'S DEFAULT THRESHOLD IS 3, AND FOR GROUNDEDNESS THAT IS THE WRONG
+# QUESTION. Measured here on 2026-08-23: a response that answered correctly and
+# then invented a 40% idle discount, 60-second billing increments and a 500,000
+# token free allowance — none of them in the source — scored 4.0 and came back
+# `pass`. The judge's own reasoning named all three inventions. The score
+# simply averaged them away against the parts that were right.
+#
+# User Story 3 asks whether a response CONTAINING an unsupported claim is
+# flagged. Only a threshold of 5 asks that question; 3 asks "is it mostly
+# grounded", which a confident fabrication can pass. Relevance keeps the SDK
+# default, where "mostly on topic" is genuinely what the metric is for.
+THRESHOLDS = {
+    "groundedness": 5,
+    "relevance": 3,
+}
+
 
 def prompt_version(path: Path) -> str:
     """Which revision of the prompt file this is, `-dirty` included.
 
-    Deliberately identical to call_model.py's function of the same name, so
-    that the version this script computes and the version the span recorded are
-    comparable at all. If they diverge, the drift check below stops being a
-    check and starts being noise.
+    THE PATH MUST BE ABSOLUTE, and it is resolved here rather than trusted from
+    the caller. Both git commands below run with `cwd` set to the file's own
+    parent, so a relative path like `fixtures/x.json` would reach git as a
+    pathspec interpreted from inside `fixtures/` — i.e. `fixtures/fixtures/x.json`,
+    which matches nothing. Git reports no commits for it and this function
+    returns "uncommitted", which is not an error and not empty: it is a
+    confident, wrong answer about a file that is committed. Measured on
+    2026-08-23, when the first fixture evaluation recorded exactly that.
+
+    Otherwise deliberately identical to call_model.py's function of the same
+    name, so that the version this script computes and the version the span
+    recorded are comparable at all. If they diverge, the drift check below stops
+    being a check and starts being noise.
     """
+    path = path.resolve()
     commit = subprocess.run(
         ["git", "log", "-1", "--format=%H", "--", str(path)],
         capture_output=True, text=True, cwd=path.parent,
@@ -234,7 +260,11 @@ def main() -> int:
                         help="Which evaluator to run.")
     parser.add_argument("--since", type=parse_since, default=timedelta(hours=2),
                         help="How far back to look for the call (default 2h).")
+    parser.add_argument("--threshold", type=int, default=None,
+                        help="Override the pass/fail threshold. Defaults to "
+                             "5 for groundedness, 3 for relevance — see THRESHOLDS.")
     args = parser.parse_args()
+    threshold = args.threshold if args.threshold is not None else THRESHOLDS[args.metric]
 
     endpoint = os.environ.get(ENDPOINT_VAR)
     connection_string = os.environ.get(CONNECTION_STRING_VAR)
@@ -290,12 +320,20 @@ def main() -> int:
         azure_deployment=JUDGE_DEPLOYMENT,
         api_version=API_VERSION,
         # NO api_key, and none exists to pass: infra/foundry.bicep sets
-        # disableLocalAuth. The credential below is handed to the evaluator
-        # explicitly rather than left to an implicit fallback, so an auth
-        # failure names the credential this script chose.
-        credential=credential,
+        # disableLocalAuth, so the data plane accepts Entra tokens only.
+        #
+        # AND NO `credential` KEY EITHER, THOUGH THE TYPE ADVERTISES ONE.
+        # AzureOpenAIModelConfiguration declares `credential: NotRequired[Any]`,
+        # but the SDK validates its own config with isinstance() — and
+        # `isinstance(x, Any)` raises. Passing the credential here fails
+        # validation 100% of the time, and the error blames the wrong thing:
+        # the validator falls back to OpenAIModelConfiguration and reports
+        # every Azure key as "unknown", which reads like a malformed endpoint
+        # rather than an unusable field. The credential goes to the evaluator
+        # below, which takes it as a real parameter.
     )
-    evaluator = EVALUATORS[args.metric](model_config, credential=credential)
+    evaluator = EVALUATORS[args.metric](model_config, credential=credential,
+                                        threshold=threshold)
 
     with tracer.start_as_current_span(SPAN_NAME) as span:
         # SET BEFORE THE JUDGE CALL. Same contract as call_model.py: if the
