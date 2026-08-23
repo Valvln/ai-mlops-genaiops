@@ -32,14 +32,14 @@ which is read from but not written to.
 environment — nothing Azure-side beyond the resource group and the pre-flight
 check is created here.
 
-- [ ] T001 Check for the soft-deleted Foundry account from feature 006's
+- [X] T001 Check for the soft-deleted Foundry account from feature 006's
   teardown — `az cognitiveservices account list-deleted -o table` — and if
   `ai300fdrylkcq74thutjeq` (`swedencentral`) is still held, purge it:
   `az cognitiveservices account purge -g rg-ai300-foundry -n
   ai300fdrylkcq74thutjeq -l swedencentral` (research.md § R1,
   contracts/foundry-redeployment.md step 1 — a mutating call, run as an
   explicit, author-authorized action)
-- [ ] T002 [P] Create the resource group: `az group create --name
+- [X] T002 [P] Create the resource group: `az group create --name
   rg-ai300-foundry --location swedencentral --tags project=ai300-prep
   environment=learning` (contracts/foundry-redeployment.md step 2)
 - [X] T003 [P] Scaffold `qa-observability/foundry-block4/pyproject.toml` with
@@ -70,16 +70,16 @@ start before this exists.
   spelling, no hyphen before `4.1`) — confirm nonzero before deploying, per
   feature 006's own R4 re-verification instruction (contracts/foundry-redeployment.md
   step 5)
-- [ ] T006 `az deployment group what-if --resource-group rg-ai300-foundry
+- [X] T006 `az deployment group what-if --resource-group rg-ai300-foundry
   --template-file infra/foundry.bicep` — review against feature 006's own
   recorded shape (account, project, deployment, Log Analytics + App Insights
   pair, two connections, one role assignment) before deploying (constitution
   Principle V, contracts/foundry-redeployment.md step 4)
-- [ ] T007 `az deployment group create --resource-group rg-ai300-foundry
+- [X] T007 `az deployment group create --resource-group rg-ai300-foundry
   --template-file infra/foundry.bicep --parameters
   callerPrincipalId=<author's object id>`, author-approved
   (contracts/foundry-redeployment.md step 6)
-- [ ] T008 Verify the redeployment matches the contract: `az
+- [X] T008 Verify the redeployment matches the contract: `az
   cognitiveservices account deployment show` reports SKU `GlobalStandard`
   (SC-001) and `az resource list -g rg-ai300-foundry --query "[].type"`
   reports the same four resource types feature 006's own T028 baseline
@@ -119,10 +119,10 @@ confirm the result is retrievable by a query naming that specific call.
   the prompt version, deployment identity, and score together; if no
   `genaiops.eval` span names the requested trace id, print that in words, never
   a row standing in for a zero score (contracts/evaluate-and-retrieve.md, FR-008)
-- [ ] T011 [US1] Run `call_model.py` (unchanged, from
+- [X] T011 [US1] Run `call_model.py` (unchanged, from
   `genaiops/foundry-block3/`) once against `hello-domain3.prompty`, producing
   one call and its trace id
-- [ ] T012 [US1] Run `evaluate_call.py --trace-id <id> --metric relevance`
+- [X] T012 [US1] Run `evaluate_call.py --trace-id <id> --metric relevance`
   against T011's call; confirm `eval.score` and `eval.result` are set (SC-002,
   User Story 1 Acceptance Scenario 1)
 - [ ] T013 [US1] In a separate invocation, run `query_evaluations.py
@@ -154,7 +154,7 @@ attributed to their own revision.
   `qa-observability/foundry-block4/prompts/grounded-qa.prompty`, revision 1: a
   bare instruction ("answer the question") with a `context` input field
   (research.md § R8)
-- [ ] T016 [US2] Commit revision 1, then edit `grounded-qa.prompty` to a
+- [X] T016 [US2] Commit revision 1, then edit `grounded-qa.prompty` to a
   context-constrained instruction ("answer only from the material given; say
   so if it isn't covered") and commit again, so ≥2 revisions exist before
   verification (FR-006)
@@ -196,10 +196,10 @@ confirm it isn't.
   load the JSON file directly (no Azure query needed to resolve the input),
   set `eval.evaluated_trace_id` to the literal `"fixture"`
   (contracts/evaluate-and-retrieve.md § `evaluate_call.py`)
-- [ ] T023 [US3] Run `evaluate_call.py --trace-id <a call from T011 or T017>
+- [X] T023 [US3] Run `evaluate_call.py --trace-id <a call from T011 or T017>
   --metric groundedness`; confirm `eval.result` reads `pass` (User Story 3
   Acceptance Scenario 1)
-- [ ] T024 [US3] Run `evaluate_call.py --fixture
+- [X] T024 [US3] Run `evaluate_call.py --fixture
   fixtures/unsupported_claim.json --metric groundedness`; confirm
   `eval.result` reads `fail` (User Story 3 Acceptance Scenario 2)
 - [ ] T025 [US3] Verify both are retrievable and distinguishable:
@@ -239,6 +239,43 @@ everything above exists.
   and its `scheduledPurgeDate` — the exact fact this feature's own R1 needed
   from feature 006, so whatever reuses this resource group next doesn't have
   to rediscover it
+
+---
+
+## Phase 7: Findings from the first real run
+
+**Purpose**: Close what building this feature disproved. Added 2026-08-23,
+after the redeploy-and-evaluate session; each task cites its entry in
+[findings.md](./findings.md), where the measurement behind it is recorded.
+
+**⚠️ T031 blocks the feature's own central claim.** SC-002 says an evaluation
+is retrievable after the fact. Right now some are and some are not, so T013,
+T014, T020 and T025 cannot be honestly verified until this is resolved.
+
+- [ ] T031 Resolve F6 — `genaiops.eval` spans are missing from Log Analytics
+  while `force_flush()` reports success. First, the free half of the
+  experiment: re-query the workspace hours after the fact and see whether the
+  missing spans appeared, which separates unexpected ingestion lag from real
+  loss. If they are genuinely lost, print the tracer provider's identity before
+  and after the evaluator call in
+  `qa-observability/foundry-block4/evaluate_call.py` — the leading hypothesis
+  is that `azure-ai-evaluation`'s bundled promptflow tracing replaces the
+  global provider, so the flush drains a provider that never held the span
+- [ ] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
+  serializes `accounts/projects` against `accounts/connections`, and make the
+  connections re-deployable or drop them, having first asked whether they earn
+  their place at all (nothing in this repository reads them). Validate with
+  `az bicep build`, then prove it by deploying twice into an empty resource
+  group: the second run must succeed, which is the property F2 says the
+  template does not currently have
+- [ ] T033 Fix F3 in `infra/foundry.bicep` — set the model deployment's
+  `capacity` to 10 so the template matches the live resource this session
+  changed by hand. Free on a token-billed SKU (capacity is a throttle, not a
+  reservation), and until it lands the template and reality disagree
+- [ ] T034 After T032 and T033, record F1–F3 in `infra/DEPLOY.md` — a
+  template that cannot be re-run and a capacity that throttles to one request
+  per minute are exactly the "easiest to walk into" class that runbook exists
+  for. Note that touching `infra/**` arms the CI deploy gate
 
 ---
 
