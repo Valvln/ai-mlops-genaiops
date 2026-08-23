@@ -41,6 +41,15 @@ failing case, research.md § R7) — mutually exclusive, exactly one required.
    opens). Print a warning to stderr, don't fail the exit code, if the flush reports
    incomplete — the same posture `call_model.py` takes.
 
+**A third outcome, found while implementing rather than while planning**: the SDK's
+`*_result` field is not binary. Alongside `"pass"` and `"fail"` it returns
+`"not_applicable"`, paired with `*_status` `"skipped"` and a `None` score, when the
+evaluator declines to judge at all. This contract as first written assumed two outcomes,
+and a script that mapped everything not-`"pass"` onto `"fail"` would have recorded a
+declined evaluation as a failing one — the same class of error FR-008 exists to prevent,
+one level up. `evaluate_call.py` records the verdict verbatim and exits non-zero on this
+case, saying in words that there is no score rather than a bad one.
+
 **Must NOT do**: retry silently on an evaluator or authentication failure; substitute a
 placeholder score when the judge model's output doesn't parse (this is exactly the
 scenario research.md § R5 names as the reason `gpt-4.1-mini`'s judge suitability is

@@ -41,6 +41,23 @@ author-authorized action at implementation time, not folded into a "just redeplo
 step. `az cognitiveservices account list-deleted` should be re-run immediately before it,
 in case the exact soft-delete name or timestamp has drifted from what's recorded here.
 
+**Confirmed at implementation time (2026-08-23)**: re-running the check found the account
+still held, with the name and both timestamps exactly as recorded above — the hold had
+roughly 22 hours left to run. Two things this check added that the desk research did not
+predict:
+
+- **The hold consumes quota.** `az cognitiveservices usage list -l swedencentral` reports
+  `OpenAI.GlobalStandard.gpt4.1-mini` at `currentValue 1.0` against a limit of `200.0`,
+  even though the resource group is gone and nothing is deployable. The soft-deleted
+  account is still holding the capacity its deployment reserved. Irrelevant at a limit of
+  200 and a usage of 1, and decisive on a meter with a limit of 1 — which several
+  region/model pairs have. A quota check run against a subscription with a recent
+  teardown reads low for a reason that has nothing to do with what is running.
+- `az group exists --name rg-ai300-foundry` returns `false`, confirming that the
+  resource-group-level view and the soft-delete registry genuinely disagree. This is the
+  blind spot feature 006's own quickstart flagged at teardown; here it is from the other
+  side, at the moment it would actually bite.
+
 ## R2 — Evaluation runs locally, against the SDK's evaluators, not through Foundry's cloud evaluation
 
 **Decision**: Evaluation results are produced by calling `azure-ai-evaluation`'s
