@@ -42,7 +42,7 @@ check is created here.
 - [ ] T002 [P] Create the resource group: `az group create --name
   rg-ai300-foundry --location swedencentral --tags project=ai300-prep
   environment=learning` (contracts/foundry-redeployment.md step 2)
-- [ ] T003 [P] Scaffold `qa-observability/foundry-block4/pyproject.toml` with
+- [X] T003 [P] Scaffold `qa-observability/foundry-block4/pyproject.toml` with
   `uv`, pinning `azure-ai-evaluation>=1.18,<2` alongside `openai`,
   `azure-identity`, `opentelemetry-sdk`, `azure-core-tracing-opentelemetry`
   (plan.md Technical Context, research.md package pin)
@@ -60,11 +60,11 @@ start before this exists.
 
 **⚠️ CRITICAL**: Complete this phase before starting Phase 3, 4, or 5's Azure-touching tasks.
 
-- [ ] T004 `az bicep build --file infra/foundry.bicep` — confirm exit 0 and no
+- [X] T004 `az bicep build --file infra/foundry.bicep` — confirm exit 0 and no
   output; the file is unchanged from feature 006, so this is expected to pass
   trivially, and a failure here would itself be a finding, not something to
   route around (contracts/foundry-redeployment.md step 3)
-- [ ] T005 Re-verify `gpt-4.1-mini` `GlobalStandard` quota in `swedencentral`
+- [X] T005 Re-verify `gpt-4.1-mini` `GlobalStandard` quota in `swedencentral`
   — `az cognitiveservices usage list -l swedencentral --query
   "[?name.value=='OpenAI.GlobalStandard.gpt4.1-mini']"` (mind the meter's own
   spelling, no hyphen before `4.1`) — confirm nonzero before deploying, per
@@ -102,7 +102,7 @@ confirm the result is retrievable by a query naming that specific call.
 
 ### Implementation for User Story 1
 
-- [ ] T009 [US1] Write `qa-observability/foundry-block4/evaluate_call.py`,
+- [X] T009 [US1] Write `qa-observability/foundry-block4/evaluate_call.py`,
   `--trace-id` path: query the Log Analytics workspace for the named
   trace's `prompt.file`, `prompt.version`, `gen_ai.request.model`, and
   `gen_ai.response.content` (reusing the query block 3's `query_trace.py`
@@ -113,7 +113,7 @@ confirm the result is retrievable by a query naming that specific call.
   [data-model.md](./data-model.md)'s Evaluation record table, set before/after
   the evaluator call per [contracts/evaluate-and-retrieve.md](./contracts/evaluate-and-retrieve.md);
   `force_flush()` before exit
-- [ ] T010 [US1] Write `qa-observability/foundry-block4/query_evaluations.py`,
+- [X] T010 [US1] Write `qa-observability/foundry-block4/query_evaluations.py`,
   `--trace-id` mode: query `genaiops.eval` spans, join by
   `eval.evaluated_trace_id` to the corresponding `genaiops.call` record, print
   the prompt version, deployment identity, and score together; if no
@@ -150,7 +150,7 @@ attributed to their own revision.
 
 ### Implementation for User Story 2
 
-- [ ] T015 [P] [US2] Create
+- [X] T015 [P] [US2] Create
   `qa-observability/foundry-block4/prompts/grounded-qa.prompty`, revision 1: a
   bare instruction ("answer the question") with a `context` input field
   (research.md § R8)
@@ -163,7 +163,7 @@ attributed to their own revision.
   two trace ids
 - [ ] T018 [US2] Run `evaluate_call.py --trace-id` for each of T017's two
   calls, same `--metric groundedness`, producing two `genaiops.eval` records
-- [ ] T019 [US2] Extend `query_evaluations.py` with `--compare <version-a>
+- [X] T019 [US2] Extend `query_evaluations.py` with `--compare <version-a>
   <version-b> --metric <name>`: retrieve both revisions' records for the named
   metric and state directly which `prompt.version` scored higher
   (contracts/evaluate-and-retrieve.md, SC-004)
@@ -188,11 +188,11 @@ confirm it isn't.
 
 ### Implementation for User Story 3
 
-- [ ] T021 [P] [US3] Author
+- [X] T021 [P] [US3] Author
   `qa-observability/foundry-block4/fixtures/unsupported_claim.json` — a
   hand-written `query`/`context`/`response` triple where `response` asserts
   something `context` does not support (research.md § R7)
-- [ ] T022 [US3] Extend `evaluate_call.py` with the `--fixture <path>` path:
+- [X] T022 [US3] Extend `evaluate_call.py` with the `--fixture <path>` path:
   load the JSON file directly (no Azure query needed to resolve the input),
   set `eval.evaluated_trace_id` to the literal `"fixture"`
   (contracts/evaluate-and-retrieve.md § `evaluate_call.py`)
