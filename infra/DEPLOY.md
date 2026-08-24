@@ -18,6 +18,10 @@ current target. § 6 is the destroy/rebuild cycle, with measured durations.
 Read the "One-way doors" section before running anything, and § 4 before leaving
 anything standing: one resource in this template bills at rest.
 
+**`infra/foundry.bicep` is a different template with different traps** — a
+sibling of `main.bicep`, deployed by hand to its own resource group. Sections
+0–6 do not describe it; § 7 does.
+
 ---
 
 ## 0. Pre-flight (do this first — it is not optional)
@@ -1094,6 +1098,134 @@ deleted vaults.
 
 ---
 
+## 7. `infra/foundry.bicep` — three traps this runbook did not have
+
+`foundry.bicep` is a **sibling of `main.bicep`, not a module of it**: a
+different resource group (`rg-ai300-foundry`), a different region
+(`swedencentral`, for the reason its own header records), and **deployed by
+hand — `infra-deploy.yml` deploys `main.bicep` only**. Everything above in this
+runbook is about `main.bicep` and does not describe it.
+
+It is recorded here anyway, because the three defects below are the "easiest to
+walk into" class this runbook exists for, and because two of them were invisible
+to every check made before deploying. Provenance:
+[`specs/007-genai-eval-observability/findings.md`](../specs/007-genai-eval-observability/findings.md)
+§ F1, § F2 and § F3, all measured on 2026-08-23 across six deployments. All
+three are **fixed in the template and proven by deploying**, not by rebuilding.
+
+**Feature 006 deployed this same template cleanly on 2026-08-19.** That is the
+uncomfortable part: F1 and F2 were present then and the deployment succeeded
+anyway, because a race resolved the lucky way. A template that has deployed once
+is not a template that has been validated.
+
+### 7.1 Every child of a Cognitive Services account contends for one lock (F1)
+
+`accounts/projects`, `accounts/deployments` and `accounts/connections` all
+mutate the parent account. ARM issues them **concurrently**; Azure serializes
+writes to the account and rejects the loser:
+
+```text
+RequestConflict: Another operation is in progress on the resource
+'.../Microsoft.CognitiveServices/accounts/ai300fdry...'.
+```
+
+Roughly half of deployments failed. `az deployment operation group list` is what
+narrows it to one resource — the deployment-level error names the account, not
+the child that lost.
+
+**The first fix was wrong in the instructive way**: one `dependsOn` between the
+project and the account-level connection *moved* the race, and the next run
+failed with the project losing to the model deployment instead. The pairs were
+never the point. The template now chains all four children in sequence:
+
+```text
+account -> deployment -> project -> account connection -> project connection
+```
+
+**Neither `az bicep build` nor `what-if` can see this.** Both describe the
+desired end state; the defect is in the order the writes are attempted. This is
+the gap § 0.4 and § 1 already warn about, in a form neither command reaches.
+
+### 7.2 A template that deploys is not a template that re-deploys (F2)
+
+Re-running the identical deployment — the ordinary way to recover from 7.1's
+partial failure — failed differently:
+
+```text
+UserError: Connection ai300fdry...-appinsights already exist, and can only be
+updated by the workspace that created it, which is the workspace with
+workspaceId: .../Microsoft.MachineLearningServices/workspaces/ai300fdry...@AML
+```
+
+The cause was simpler than the error suggests: **both App Insights connections
+were declared with the same name.** A Foundry project is projected as an AML
+workspace (`...@AML` in the message — an identity the template never declares)
+sharing the account's connection namespace, so whichever was created second
+collided with the first and was refused as an unauthorised update. The
+project-level connection now carries a `-project` suffix.
+
+**Prove idempotency by deploying twice into the same group**, since this is the
+property that was missing:
+
+```bash
+az deployment group create -g rg-ai300-foundry --template-file infra/foundry.bicep \
+  --parameters callerPrincipalId="$(az ad signed-in-user show --query id -o tsv)" \
+  --name foundry-001
+# and again, unchanged - the second run must also succeed
+az deployment group create -g rg-ai300-foundry --template-file infra/foundry.bicep \
+  --parameters callerPrincipalId="$(az ad signed-in-user show --query id -o tsv)" \
+  --name foundry-002
+```
+
+The `2025-04-01-preview` API version on these two connections was flagged in
+feature 006's plan as **not fully pre-verified**. This is what that flag was
+worth. Note also that nothing in this repository *reads* either connection — they
+are portal wiring, and they cost two deployment failures to keep.
+
+### 7.3 `capacity: 1` is one request per minute (F3)
+
+Not "1000 tokens per minute". The first judge call returned:
+
+```text
+RateLimitError: Error code: 429 - Your requests to gpt-4.1-mini for
+gpt-4.1-mini in swedencentral have exceeded rate limit.
+```
+
+Read the limits off the live deployment rather than inferring them from the SKU:
+
+```bash
+az cognitiveservices account deployment show -g rg-ai300-foundry \
+  -n <account> --deployment-name gpt-4.1-mini --query "properties.rateLimits"
+```
+
+| Limit | At `capacity: 1` | At `capacity: 10` |
+| --- | --- | --- |
+| `request` | **1 / 60 s** | 10 / 60 s |
+| `token` | 1000 / 60 s | 10000 / 60 s |
+
+Block 3 never noticed because its calls were manual and minutes apart. Block 4
+scores a response by calling a judge model, so it makes at least two calls per
+scored answer and 429s on contact. The template now declares `capacity: 10`.
+
+**Raising it is free, and the distinction is exam material.** On a token-billed
+SKU (`Standard`, `GlobalStandard`) capacity is a **throttle**: it sets TPM/RPM
+and changes neither the per-token price nor the at-rest cost, which stays €0.00.
+On a **provisioned** SKU the same number is a **billing floor**
+([`docs/exam-notes/foundry-cost-model.md`](../docs/exam-notes/foundry-cost-model.md)
+§ 6).
+
+### 7.4 Editing this file arms the CI deploy gate
+
+`infra-deploy.yml` triggers on `paths: ['infra/**']`, and **`DEPLOY.md` lives in
+`infra/`**. A commit that touches only this runbook, or only `foundry.bicep`,
+still queues a run of the `azure-deploy` environment waiting on a human
+approval — for a deployment of `main.bicep`, which the commit did not change.
+Approve it only if `main.bicep` was genuinely meant to be redeployed; otherwise
+leave it pending or cancel it. The gate exists to put a human decision in front
+of every deploy (§ 5), so it is never approved on someone else's behalf.
+
+---
+
 ## Summary checklist
 
 - [x] Five resource providers report `Registered`
@@ -1132,3 +1264,9 @@ deleted vaults.
       absent row is not a zero. Expect the registry's ≈0.146 EUR/day and nothing
       else; anything above that is an undeclared resource. Command in section 4
 - [ ] Workspace name soft-delete — claim **withdrawn**, no evidence either way
+- [x] `foundry.bicep`'s deployment race serialized, and proven by deploying —
+      section 7.1; a template that deployed once had not been validated
+- [x] `foundry.bicep` proven re-deployable by running it twice unchanged —
+      section 7.2, the property it did not have
+- [x] Model deployment capacity read off the live service, not the template:
+      capacity is requests **and** tokens per minute — section 7.3
