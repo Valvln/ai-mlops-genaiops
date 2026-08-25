@@ -93,7 +93,9 @@ is worse than no budget check.
 | Groundedness, a grounded answer | 5.0 / threshold 5 → `pass` |
 | Groundedness, the fixture | 4.0 / threshold 5 → `fail` |
 | Invocations | ~13 actual, against SC-006's cap of 500 |
-| At-rest cost | €0.00 — nothing here bills while idle |
+| Cost of the build day (2026-08-23) | **0.00752 EUR**, measured — all of it `Foundry Models` |
+| Log Analytics, same day | **0.0 EUR** — a displayed zero, not an absent row |
+| At-rest cost of an idle day | **not measured** — see below |
 
 ## What is not proven
 
@@ -105,8 +107,32 @@ on block 3's unmodified script. Roughly 70% of spans still never appear.
 So the retrieval of two specific records — the prompt comparison and the
 fixture's verdict — could not be demonstrated, though both evaluations ran
 correctly and repeatedly. `specs/007-genai-eval-observability/findings.md` § F6
-has the full evidence and the one untested hypothesis left: service-driven
-adaptive sampling, which the SDK is observably fetching configuration for.
+has the full evidence.
+
+**I am closing this as a known limitation rather than chasing it.** One
+hypothesis is left — a service-driven adaptive sampler, whose configuration the
+SDK is observably fetching — and testing it means redeploying the environment I
+tore down, to learn something about Application Insights' internals that no part
+of this repository can act on and no part of the exam asks about. What I keep
+instead is the rule the loss taught: a flush that returns true, an `HTTP 200`,
+and `Items accepted` are three acknowledgements, and none of them is
+"queryable". A record counts as retrievable when a *separate process reads it
+back*.
+
+**The at-rest cost of an idle day is a prediction, not a measurement, and I want
+that written down rather than rounded off.** Cost Management, read on
+2026-08-25, gives `rg-ai300-foundry` **0.00752 EUR on 2026-08-23** — the only
+day this environment existed, and a day with ~13 model calls in it. Broken down
+by meter, **all of it is `Foundry Models`**; `Log Analytics` shows **0.0**, a
+displayed zero rather than an absent row, so the whole session's telemetry
+ingested for nothing.
+
+What is missing is the other half: a day where the *token* cost is zero too.
+That day never happened, because I deployed and destroyed inside the same one.
+For 2026-08-24 there is no row for this group *and none for any other group*,
+and with the subscription now empty there is no control billing that day to
+prove the data landed — so that absence is "no data yet", not a confirmed zero.
+I expect €0.00; I have not seen it.
 
 ## Teardown
 

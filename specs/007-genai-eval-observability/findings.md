@@ -10,11 +10,11 @@ sound. That is the point of writing them down separately from `research.md`:
 research recorded what was decided **before** building, and these are what
 building disproved.
 
-**Status, updated 2026-08-23 evening**: F1, F2, F3, F7 and F8 are **fixed and
-verified**. F4 is worked around. F5 is resolved in code. **F6 is still open**,
-and is now the only thing between this feature and a complete verification —
-the fresh workspace F8's fix produced did *not* cure it, which disproved the
-hypothesis this document carried for most of the day.
+**Status, updated 2026-08-25**: F1, F2, F3, F7 and F8 are **fixed and
+verified**. F4 is worked around. F5 is resolved in code. **F6 is closed as a
+known limitation, not fixed** — every layer this repository owns has been
+measured innocent, and the one hypothesis left is service-side. See the section
+at the end of F6.
 
 The template fixes were made after the author authorised them ("we'll fix it
 before finishing the block"), and each was proven by deployment rather than by
@@ -226,7 +226,8 @@ things — the score and the threshold — and only the first is the model's.
 
 ## F6 — Evaluation spans are not reaching Log Analytics, and `force_flush` reports success
 
-**Severity**: unresolved, and it blocks SC-002.
+**Severity**: closed as a known limitation on 2026-08-25 — diagnosed to the
+edge of what this repository controls, and not fixed.
 
 Six `genaiops.*` spans were produced. Roughly 40 minutes later, three had
 arrived:
@@ -345,6 +346,30 @@ way — but it did not touch F6.
   looks like from the client side, and the SDK is observably fetching
   `AzMonSDKDynamicConfiguration` from the live-metrics endpoint. **Untested**,
   and named here as the next thing to try, not as a conclusion.
+
+### Closed as a known limitation — 2026-08-25
+
+**Not fixed, and deliberately not pursued further.** One hypothesis is left,
+named above: a service-driven adaptive sampler. Testing it means redeploying the
+environment that was torn down, and the answer would be a statement about
+Application Insights' internal ingestion behaviour — not about anything AI-300
+asks, and not about anything in this repository, which has already been shown
+innocent at every layer it owns.
+
+What this feature keeps instead of a fix is the discipline the loss forced:
+
+- **A trace store is a dependency, not a given.** Everything downstream of it —
+  retrieval, comparison, the invocation counter — inherits its losses.
+- **`force_flush()` returning true, `HTTP 200`, and `Items accepted: 8` are
+  three separate acknowledgements, and none of them is "queryable".** A record
+  is verified when a *separate process reads it back*, which is exactly why
+  `evaluate_call.py` and `query_evaluations.py` are separate programs.
+- **The under-reporting direction matters more than the magnitude.** See the
+  invocation counter below.
+
+Recorded as a limitation in `qa-observability/foundry-block4/README.md`
+("What is not proven") and in tasks.md T031, which previously pointed at the
+promptflow hypothesis this document has since disproved.
 
 ### What it costs this feature
 

@@ -228,11 +228,63 @@ everything above exists.
 - [ ] T028 Run [quickstart.md](./quickstart.md) end to end as a final check,
   from pre-flight through teardown, on a session separate from the one that
   built each piece
-- [ ] T029 SC-008, deferred per spec.md's Deferred Criteria table: the day
-  after deployment, read Cost Management for a day with zero calls sent —
-  confirm €0.00, reading an absent row as "no data yet" and checking against a
-  control resource group known to be billing the same day, never assuming a
-  missing row is a confirmed zero (spec.md Edge Cases, `infra/DEPLOY.md` § 4)
+- [X] T029 SC-008 read on 2026-08-25 — **the answer is "not available", and
+  that is the honest reading rather than a failure to look.** Cost Management,
+  subscription scope, `Daily`, grouped by `ResourceGroupName`, 2026-08-19 to
+  2026-08-25 (`infra/DEPLOY.md` § 4's query):
+
+  | Day | `rg-ai300-foundry` | Any other row that day |
+  | --- | --- | --- |
+  | 2026-08-19 | 0.00104 EUR — block 3's build day | `rg-ai300-test02` 0.14641 |
+  | 2026-08-20 | — (group did not exist) | `rg-ai300-test02` 0.04241 |
+  | 2026-08-21, 08-22 | — (group did not exist) | **none** |
+  | 2026-08-23 | **0.00752 EUR** — block 4's build day | **none** |
+  | 2026-08-24 | — | **none** |
+  | 2026-08-25 | — | **none** |
+
+  Three conclusions, and only one of them is a €0.00 that was actually read:
+
+  1. **A day with zero requests never happened.** The block 4 environment was
+     deployed and destroyed on 2026-08-23, so the only day it existed is a day
+     that carried ~13 model calls and their telemetry. SC-008 asks about an
+     idle day; this environment never saw a midnight.
+  2. **On that day, everything except tokens billed a displayed zero.** Broken
+     down by `MeterCategory`, 2026-08-23 has exactly two rows for the group:
+
+     | Meter category | Cost |
+     | --- | --- |
+     | `Foundry Models` | 0.00752343715678953 EUR |
+     | `Log Analytics` | **0.0 EUR** |
+
+     That second row is the useful one, and it is a **zero-valued row, not an
+     absent one** — the trace store ingested the whole session and charged
+     nothing for it, displayed rather than inferred. There is no row of any
+     kind for the account at rest, the project, or the App Insights component.
+     So the *at-rest* half of SC-008's claim is measured; what is missing is a
+     day where the token half is also zero.
+  3. **The day after destruction reads as no data, not as zero.** Feature
+     006's T027 established the rule: an absent row counts as a zero *only*
+     when another resource group is seen billing the same day, because that
+     row proves the day's data landed. There is no such row for 2026-08-24,
+     and there cannot be — `az group list` returns `[]`, so nothing in this
+     subscription bills any more and the control the rule depends on no longer
+     exists. An absent row with no control is "no data yet"
+     (`infra/DEPLOY.md` § 4), and collapsing it into a confirmed zero is the
+     exact error that section was written to stop. Note that this subscription
+     *does* emit zero-valued rows when it has something to say, as row 2 above
+     shows — which makes a total absence a weaker signal, not a stronger one.
+
+  `az consumption usage list` was tried as a second source and cannot settle
+  it either: on this subscription it returns records with `pretaxCost: None`
+  and `usageStart: null`, ignoring the date filter — which confirms § 4's note
+  about that command rather than adding evidence.
+
+  **SC-008 as written therefore stays unverified, and is unverifiable without a
+  fresh deployment left standing across a midnight with no calls sent.** What
+  the reading did establish is narrower and worth keeping: on the one day this
+  environment existed, its entire cost was per-token inference, and its
+  observability stack — the only part that runs whether or not anyone calls
+  the model — billed a measured, displayed €0.00
 - [X] T030 SC-007, after T029: `az group delete --name rg-ai300-foundry
   --yes`, then `az resource list -g rg-ai300-foundry` confirms zero resources
   remain. Also record `az cognitiveservices account list-deleted`'s new entry
@@ -252,15 +304,21 @@ after the redeploy-and-evaluate session; each task cites its entry in
 is retrievable after the fact. Right now some are and some are not, so T013,
 T014, T020 and T025 cannot be honestly verified until this is resolved.
 
-- [ ] T031 Resolve F6 — `genaiops.eval` spans are missing from Log Analytics
-  while `force_flush()` reports success. First, the free half of the
-  experiment: re-query the workspace hours after the fact and see whether the
-  missing spans appeared, which separates unexpected ingestion lag from real
-  loss. If they are genuinely lost, print the tracer provider's identity before
-  and after the evaluator call in
-  `qa-observability/foundry-block4/evaluate_call.py` — the leading hypothesis
-  is that `azure-ai-evaluation`'s bundled promptflow tracing replaces the
-  global provider, so the flush drains a provider that never held the span
+- [X] T031 **Closed as a known limitation on 2026-08-25, not fixed.** F6 —
+  `genaiops.eval` spans are missing from Log Analytics while `force_flush()`
+  reports success — is diagnosed as far as this repository can take it, and
+  findings.md § F6 carries the evidence. **The hypothesis this task used to
+  name has been tested and is false**: `azure-ai-evaluation` does *not* replace
+  the global tracer provider (same object, same four span processors, checked
+  at four points), so anyone picking this task up on that text would be chasing
+  something already disproved. Also ruled out by measurement: ingestion lag,
+  configured sampling and caps, the workspace's soft-delete history, the code
+  under test, and the exporter itself — Application Insights answers `HTTP 200`
+  with `Items accepted`. What remains is a **service-side adaptive sampler**,
+  which is untestable from here without a fresh deployment, and whose answer
+  would be internal Azure behaviour of no exam value. Recorded as a limitation
+  in findings.md § F6, `qa-observability/foundry-block4/README.md` and the
+  table below rather than pursued
 - [X] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
   serializes `accounts/projects` against `accounts/connections`, and make the
   connections re-deployable or drop them, having first asked whether they earn
@@ -272,42 +330,46 @@ T014, T020 and T025 cannot be honestly verified until this is resolved.
   `capacity` to 10 so the template matches the live resource this session
   changed by hand. Free on a token-billed SKU (capacity is a throttle, not a
   reservation), and until it lands the template and reality disagree
-- [ ] T034 After T032 and T033, record F1–F3 in `infra/DEPLOY.md` — a
-  template that cannot be re-run and a capacity that throttles to one request
-  per minute are exactly the "easiest to walk into" class that runbook exists
-  for. Note that touching `infra/**` arms the CI deploy gate
+- [X] T034 F1–F3 recorded in `infra/DEPLOY.md` § 7 on 2026-08-25 — a new
+  section, because sections 0–6 are `main.bicep`'s runbook and `foundry.bicep`
+  is a sibling template deployed by hand, not a module of it. § 7.1 the
+  account-level lock and the chain that serializes it, § 7.2 the connection
+  name collision and the deploy-it-twice proof of idempotency, § 7.3 capacity
+  as requests-per-minute read off the live service, § 7.4 the fact that
+  editing anything under `infra/**` — `DEPLOY.md` included — arms the CI
+  deploy gate for a `main.bicep` deployment the commit did not change
 
 ---
 
-## Where this stands, 2026-08-23
+## Where this stands, 2026-08-25
 
 **Done and verified**: the redeploy (on a template this block had to fix
 first), User Story 1 end to end including FR-008's absence case, both
 directions of the groundedness check at evaluation time, the invocation count,
 and teardown — verified clean, with the resource group gone, no soft-deleted
-account, the workspace genuinely deleted and the quota released.
+account, the workspace genuinely deleted and the quota released. The three
+template defects are fixed, proven by deploying, and written into
+`infra/DEPLOY.md` § 7 (T032, T033, T034).
 
-**Left open, all for the same reason.** F6: roughly 70% of spans never reach
-the workspace, though the exporter is acknowledged with `HTTP 200` and
-`Items accepted`. Everything below needs a *particular* record to survive that:
+**Closed without a fix, on purpose.** F6 — roughly 70% of spans never reach the
+workspace, though the exporter is acknowledged with `HTTP 200` and
+`Items accepted` — is now a **known limitation** rather than an open hunt
+(T031). Everything ruled out is ruled out by measurement, including the
+hypothesis this document carried longest; what remains is a service-side
+sampler, which would cost a redeploy to test and would answer a question about
+Azure's internals rather than about anything this exam covers. What that leaves
+unproven:
 
-| Task | What it needs |
+| Task | What it needs, and why it stays unproven |
 | --- | --- |
 | T018, T020 | Two prompt revisions' groundedness records, both retained, to compare |
 | T025 | The fixture's `fail` record, retained and retrieved |
 | T028 | A quickstart run end to end, which contains all of the above |
-| T031 | F6 itself — one untested hypothesis left: service-driven adaptive sampling |
-| T034 | `infra/DEPLOY.md` — deliberately deferred, since touching `infra/**` arms the CI gate |
+| T029 | SC-008 — read on 2026-08-25. The at-rest half is measured (`Log Analytics` billed a displayed 0.0); the idle day it asks for never existed, and there is no longer a control to make 2026-08-24's absence readable |
 
-T029 (SC-008's deferred cost reading) is **not deferred any more, it is
-unavailable**: it needed a day of Cost Management data against a live resource
-group, and teardown removed the subject. The at-rest claim is unchanged and was
-never in doubt — nothing this block created bills while idle — but the
-measured-zero confirmation would need a fresh deployment left standing
-overnight.
-
-The evaluations themselves ran correctly every time. What is unproven is the
-retrieval of specific records, not the scoring behind them.
+The evaluations themselves ran correctly every time, reproducibly. What is
+unproven is the retrieval of specific records, not the scoring behind them —
+and that distinction is the whole finding.
 
 ---
 
