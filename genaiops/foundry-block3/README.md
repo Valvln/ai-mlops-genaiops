@@ -58,6 +58,18 @@ The plan predicted I would need `Log Analytics Reader` and would not need
 anything for inference. Both backwards. Which plane guards an API has to be
 read off the refusal, not inferred from how strong the role sounds.
 
+**Correction, 2026-08-26 — the mechanism above is right, the role name is not.**
+Reading the current documentation for the Domain 3 mock exam turned up two
+sentences that supersede the middle row. Learn now prescribes **`Foundry User`**
+(recently renamed from `Azure AI User`) on the Foundry account scope as the role
+for calling a deployment at inference time, and says in as many words: *"Don't
+assign built-in roles that start with Cognitive Services. These roles are
+designed for accessing AI Services resources directly and don't apply to Foundry
+scenarios."* `Cognitive Services OpenAI User` did fix the `401` here — that is an
+observation, not a mistake — but it is the older, wider grant, and it is not the
+answer this exam wants. The full role table is in
+`docs/exam-notes/foundry-rbac-and-authentication.md` § 3.
+
 The third one I deliberately left refused. The tidy way to configure tracing is
 to let the app discover its own telemetry target through the project's
 Application Insights connection, but that needs
