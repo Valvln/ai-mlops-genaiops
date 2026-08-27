@@ -125,8 +125,11 @@ resource foundryProject 'Microsoft.CognitiveServices/accounts/projects@2025-06-0
   // ordered the project against the CONNECTION only, whereupon the project
   // raced the DEPLOYMENT instead. The pairs are not the point; the parallelism
   // is, so the children are chained one after another rather than paired up.
+  //
+  // Re-pointed by feature 008 from the chat deployment to the embedding one, so
+  // that adding a second deployment lengthened the chain instead of forking it.
   dependsOn: [
-    modelDeployment
+    embeddingDeployment
   ]
   identity: {
     type: 'SystemAssigned'
@@ -211,6 +214,68 @@ resource modelDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-
     // Explicit rather than defaulted: with a single deployment there is
     // nothing to fail over to, and an upgrade policy that silently moves the
     // model version underneath a pinned trace would defeat the pin above.
+    versionUpgradeOption: 'NoAutoUpgrade'
+  }
+}
+
+// --- The embedding deployment (feature 008) ----------------------------------
+//
+// Added for block 5, which embeds ~145 chunks once and one query per question.
+// Per-token like its sibling, and idle at EUR 0.00/day: an embedding deployment
+// with no traffic has no meter running.
+//
+// THE SKU IS 'Standard' AND THE CATALOG SAYS IT DID NOT HAVE TO BE. Measured
+// twice in swedencentral, on 2026-08-27:
+//
+//   az cognitiveservices model list  -> Skus: Standard,GlobalStandard,DataZoneStandard
+//   az cognitiveservices usage list  -> OpenAI.Standard.text-embedding-3-large        350
+//                                       OpenAI.GlobalStandard.text-embedding-3-large    0
+//                                       OpenAI.DataZoneStandard.text-embedding-3-large  0
+//
+// This is the same shape of gap that cost feature 006 two failed what-ifs on
+// gpt-5-nano, and it is worth restating because the two commands look
+// interchangeable and are not: the catalog answers "does this SKU exist in this
+// region", and only the usage list answers "can THIS SUBSCRIPTION deploy it".
+// GlobalStandard would compile, pass review, and fail on InsufficientQuota.
+//
+// Standard is regional rather than global — the traffic stays in swedencentral —
+// and is per-token exactly as GlobalStandard is. Nothing about the choice moves
+// this deployment toward the provisioned family.
+resource embeddingDeployment 'Microsoft.CognitiveServices/accounts/deployments@2025-06-01' = {
+  parent: foundryAccount
+  name: 'text-embedding-3-large'
+  // SECOND LINK IN F1's CHAIN, AND THE REASON THIS RESOURCE WAS NOT SIMPLY
+  // DECLARED ALONGSIDE ITS SIBLING. Two deployments under one account are two
+  // writes to the same account-level lock, and ARM issues siblings
+  // concurrently: without this edge the pair races and Azure rejects the loser
+  // with RequestConflict roughly half the time. Half is worse than always,
+  // because it passes often enough to look fixed. Neither `az bicep build` nor
+  // `what-if` can see it — both describe desired state, and the defect is in
+  // the order the writes are attempted (findings.md § F1).
+  //
+  // The chain is now: account -> gpt-4.1-mini -> here -> project -> account
+  // connection -> project connection.
+  dependsOn: [
+    modelDeployment
+  ]
+  sku: {
+    name: 'Standard'
+    // Units of 1000 tokens/minute against a limit of 350. Block 4's F3 is the
+    // reason this is not 1: capacity buys requests per minute as well as
+    // tokens, and embed_and_push.py issues one call per batch back to back.
+    capacity: 10
+  }
+  properties: {
+    model: {
+      format: 'OpenAI'
+      name: 'text-embedding-3-large'
+      // Pinned, like the chat model. The vector dimension is a property of the
+      // model that produced it: a version moving underneath a populated index
+      // would leave 3072-dimension vectors that no longer correspond to what
+      // the query encoder emits, and nothing about the search results would
+      // announce it.
+      version: '1'
+    }
     versionUpgradeOption: 'NoAutoUpgrade'
   }
 }
@@ -396,28 +461,49 @@ resource projectAppInsightsConnection 'Microsoft.CognitiveServices/accounts/proj
 // against the data plane behind it. The two permission systems are separate,
 // and holding the stronger-sounding one grants nothing in the other.
 //
-// Cognitive Services OpenAI User is the narrowest built-in role containing the
-// action the refusal named — read on the account, plus the inference actions,
-// and no write to the resource itself. The repository's standing rule against
-// widening with a built-in role governs the CI deployer role in
-// infra/ci-identity.bicep, which is untouched here and by this whole feature
-// (FR-012 stays dormant); this grant is to the author's own interactive
+// Cognitive Services OpenAI User (5e0bd9bd-...) was what cleared that 401. It
+// was the narrowest built-in role containing the action the refusal named —
+// read on the account, plus the inference actions, and no write to the resource
+// itself. The repository's standing rule against widening with a built-in role
+// governs the CI deployer role in infra/ci-identity.bicep, which is untouched
+// here and by this whole feature; this grant is to the author's own interactive
 // identity, at the scope of one account in a disposable resource group.
+//
+// THE ROLE THAT WORKED WAS NOT THE ROLE THAT IS PRESCRIBED, and feature 008 is
+// where the two are reconciled. Block 3 arrived at its role by failing and then
+// picking the narrowest built-in role that named the missing action — a method
+// that answers "what unblocks this call", not "what is this account's documented
+// inference role". Current documentation answers the second question differently:
+// Foundry User is the role for calling a deployment at a Foundry account's scope,
+// and the Cognitive Services * family is explicitly what not to assign on these
+// accounts (docs/exam-notes/foundry-rbac-and-authentication.md §§ 3-4).
+//
+// Assigned BY GUID, never by display name. The role family was renamed while
+// this repository was being written, so a display name is a moving reference and
+// the identifier is not — which is also why the old GUID is still spelled out
+// above rather than described.
+//
+// The substitution is not assumed to work. The combination of Foundry User alone
+// against this deployment has never been exercised here, so feature 008 makes one
+// inference call under it and records what happens: a success promotes this line
+// to the only grant in the repository that is both measured and prescribed, a
+// refusal becomes a finding and restores the role above with that finding cited
+// beside it (specs/008-rag-retrieval-quality, FR-016).
 //
 // Declared here rather than run as a one-off `az role assignment create` so it
 // comes back with the resource group. This environment is meant to be
 // destroyed and rebuilt, and a grant that only exists in someone's shell
 // history does not survive that.
-var cognitiveServicesOpenAIUserRoleId = subscriptionResourceId(
+var foundryUserRoleId = subscriptionResourceId(
   'Microsoft.Authorization/roleDefinitions',
-  '5e0bd9bd-7b93-4f28-af87-19fc36ad61bd'
+  '53ca6127-db72-4b80-b1b0-d745d6d5456d'
 )
 
 resource callerInferenceGrant 'Microsoft.Authorization/roleAssignments@2022-04-01' = if (!empty(callerPrincipalId)) {
   scope: foundryAccount
-  name: guid(foundryAccount.id, callerPrincipalId, cognitiveServicesOpenAIUserRoleId)
+  name: guid(foundryAccount.id, callerPrincipalId, foundryUserRoleId)
   properties: {
-    roleDefinitionId: cognitiveServicesOpenAIUserRoleId
+    roleDefinitionId: foundryUserRoleId
     principalId: callerPrincipalId
     // 'User', not the 'ServicePrincipal' main.bicep uses: the principal here
     // is a human in the directory, not a managed identity. Declaring it skips
@@ -430,3 +516,4 @@ output foundryAccountName string = foundryAccount.name
 output foundryAccountEndpoint string = foundryAccount.properties.endpoint
 output foundryProjectName string = foundryProject.name
 output modelDeploymentName string = modelDeployment.name
+output embeddingDeploymentName string = embeddingDeployment.name
