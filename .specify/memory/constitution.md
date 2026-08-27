@@ -97,6 +97,27 @@ Work follows the spec-driven loop: **specify → plan → tasks → implement**.
 - The author authorizes the commit (Principle III).
 - Documentation is updated at milestone boundaries (Principle IV).
 
+### Sourced Research Before the Plan Freezes
+
+Adopted after a contradiction measured on 2026-08-26: a role assignment that
+demonstrably worked (`Cognitive Services OpenAI User`, which cleared a `401` on
+inference) turned out to differ from what the official documentation prescribes
+for that scenario (`Foundry User` on the account scope, with Cognitive Services
+roles explicitly discouraged). The measurement was sound; the conclusion drawn
+from it was incomplete. See `genaiops/foundry-block3/README.md`. The divergence
+surfaced by accident while preparing a mock exam, a week after the measurement,
+because nothing in the workflow required the source to be read alongside it. A
+measurement reports what happened, not what is prescribed.
+
+- The research phase of a feature MUST produce one or more notes in
+  `docs/exam-notes/`, drawn from the official documentation, each listing its
+  sources and the date they were read.
+- Those notes MUST exist **before the plan is frozen**. An internal `research.md`
+  does not satisfy this requirement on its own.
+- Subsequent measurement either **confirms** the source — the note then carries a
+  verification alongside it — or **contradicts** it. A contradiction MUST be
+  recorded as a finding, stating which of the two is wrong and on what evidence.
+
 ## Governance
 
 This constitution supersedes other practices in this repository. Where a
@@ -110,4 +131,4 @@ principle and a convenience conflict, the principle wins.
 - Any proposed change that violates a principle MUST be surfaced as a violation
   before implementation, not silently worked around.
 
-**Version**: 1.0.1 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-15
+**Version**: 1.1.0 | **Ratified**: 2026-08-06 | **Last Amended**: 2026-08-27
