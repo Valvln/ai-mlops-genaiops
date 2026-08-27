@@ -66,6 +66,16 @@ mlruns/
 # inheriting it.
 mlops/training-pipeline/baseline.json
 
+# Retrieval runs for feature 008. Regenerable by command from the index, at the
+# cost of one query embedding each. The label set beside them is the opposite -
+# no command reproduces a human judgment - so questions/ stays tracked.
+rag-optimization/rag-block5/runs/
+
+# The cut corpus. A build output of chunk_corpus.py over docs/exam-notes at a
+# commit, and every chunk carries that commit - so the pair (script, commit)
+# reproduces it byte for byte. Tracking it would be tracking the same text twice.
+rag-optimization/rag-block5/chunks.jsonl
+
 # Personal study material: exam notes, flashcards, progress tracker.
 # Kept out of the repo deliberately - see the "*.local.md" convention.
 *.local.md

@@ -1,0 +1,38 @@
+[project]
+name = "ai300-rag-block5"
+version = "0.1.0"
+description = "Retrieval-quality harness for feature 008 — one index, four query shapes, one labelled ground truth"
+requires-python = "==3.11.*"
+
+dependencies = [
+    # The data-plane client. An index is not an ARM resource, so everything
+    # search.bicep cannot express — the schema, the vector profile, the
+    # semantic configuration, the documents themselves — is created through
+    # this package instead. 12.0.0 is the first stable major after the long
+    # 11.6/11.7 beta line, and it is the one the vector-query and semantic
+    # types are checked against here.
+    "azure-search-documents>=12.0.0,<13",
+    # DocumentRetrievalEvaluator lives here. It is arithmetic over human
+    # labels, not a judge: no model call, no deployment name, nothing to
+    # bill. 1.18.3 is the released tag whose __init__ was verified to export
+    # the class, because the Learn reference page for the package lists
+    # RetrievalEvaluator and omits this one (research.md § R8).
+    "azure-ai-evaluation>=1.18.3,<2",
+    # No API keys anywhere in this feature, as in block 3. The same
+    # credential resolves the az-CLI login for three different planes here:
+    # the Foundry deployment, the search service, and the token used to read
+    # /servicestats by hand.
+    "azure-identity>=1.19,<2",
+    # The Foundry embedding deployment speaks the OpenAI API, so the vendor
+    # SDK is the client. Pinned to the same 1.x line block 3 runs on, since
+    # its call_model.py is reused unchanged by T029 and a split between the
+    # two would make that reuse a claim rather than a fact.
+    "openai>=1.60,<2",
+    # FR-002: the token distribution is measured before the corpus is cut,
+    # not assumed from a recommended constant. Local, free, and the only way
+    # a chunk cap in tokens means anything.
+    "tiktoken>=0.8,<1",
+]
+
+[tool.uv]
+package = false
