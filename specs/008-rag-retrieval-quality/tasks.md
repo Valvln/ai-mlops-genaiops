@@ -72,7 +72,7 @@ already reported the wrong thing once ([research.md](./research.md) R1, R3, R8).
 - [X] T021 Run `service_stats.py` against the **empty** service and save the raw output. This is also the RBAC smoke test: a `403` here means T012's role split, not the tier
 - [X] T022 Run `create_index.py` against the service and confirm the index exists with the semantic configuration attached
 - [X] T023 Write `rag-optimization/rag-block5/embed_and_push.py`: embed each chunk with the `text-embedding-3-large` deployment through the `openai` SDK using an Entra token, and push documents over the data plane in batches. **No key anywhere** (contracts/search-service-and-index.md § 4)
-- [ ] T024 **€** Run `embed_and_push.py` once. ≈55.000 tokens at 0,0002 €/1K ≈ **0,011 €**. Record the actual token count consumed
+- [X] T024 **€** Run `embed_and_push.py` once. ≈55.000 tokens at 0,0002 €/1K ≈ **0,011 €**. Record the actual token count consumed
 
 **Checkpoint**: both templates deployed once, index populated, service statistics readable. All three stories can now proceed.
 
