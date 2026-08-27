@@ -70,6 +70,17 @@ observation, not a mistake — but it is the older, wider grant, and it is not t
 answer this exam wants. The full role table is in
 `docs/exam-notes/foundry-rbac-and-authentication.md` § 3.
 
+**Settled, 2026-08-27 — and the middle row above is now out of date.** Block 5
+had to redeploy `infra/foundry.bicep` anyway, so I made the substitution there
+rather than leaving it as a note: the template now grants **`Foundry User`** by
+GUID and no `Cognitive Services *` role survives anywhere on the account. Then I
+ran this script unchanged against it, because the combination had never actually
+been exercised — `total_tokens=344`, a completion came back. So the middle row
+reads *"no — `401`, fixed with `Foundry User`"* from here on, and the older role
+is history rather than configuration. What I would have written up either way:
+a refusal would have been the finding, and the old grant would have gone back
+with that finding cited beside it.
+
 The third one I deliberately left refused. The tidy way to configure tracing is
 to let the app discover its own telemetry target through the project's
 Application Insights connection, but that needs

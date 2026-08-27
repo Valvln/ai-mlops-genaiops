@@ -127,8 +127,29 @@ error. But the role Learn prescribes for calling a deployment is:
 > «To call a deployment at inference time, assign the **Foundry User** role on
 > the **Foundry account scope** (or use the account API key).»
 
-`genaiops/foundry-block3/README.md` documents the older path and should say so
-when it is next touched.
+**Verified 2026-08-27 (feature 008).** The substitution was made in
+`infra/foundry.bicep` — `53ca6127-db72-4b80-b1b0-d745d6d5456d` at the account
+scope, replacing `5e0bd9bd-…` — and then exercised rather than assumed:
+
+```text
+az role assignment list --scope <account-id> --query "[].roleDefinitionName"
+  Foundry User                     # and nothing beginning with Cognitive Services
+
+cd genaiops/foundry-block3 && uv run call_model.py
+  model=gpt-4.1-mini-2025-04-14  total_tokens=344
+```
+
+The call returned a completion. Foundry User alone carries the data action
+`.../deployments/chat/completions/action` whose absence produced feature 006's
+`401`, so the prescription and the measurement agree, and the grant in
+`infra/foundry.bicep` is now the only role assignment in this repository that is
+**both** documented as correct and observed to work.
+
+Worth stating what this does *not* establish. Feature 006's role was never wrong,
+only unprescribed: both roles carry the action, and a call that succeeds cannot
+distinguish "this is the intended role" from "this role happens to be sufficient".
+What settles it is the sentence quoted above, not the HTTP 200 — the measurement
+rules out the one outcome that would have contradicted the source.
 
 ---
 
