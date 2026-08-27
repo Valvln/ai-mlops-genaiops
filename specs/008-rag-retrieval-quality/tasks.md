@@ -32,13 +32,13 @@ story to drop first if the block collapses.
 local project. Three of these checks exist because a green-looking command
 already reported the wrong thing once ([research.md](./research.md) R1, R3, R8).
 
-- [ ] T001 Register the resource provider: `az provider register -n Microsoft.Search`, then poll `az provider show -n Microsoft.Search --query registrationState -o tsv` until it reports `Registered` — it was **`NotRegistered`** on 2026-08-27 and an unregistered provider fails deployment with `MissingSubscriptionRegistration`, which reads like an authorization refusal (research.md § R1)
-- [ ] T002 [P] Confirm the subscription is still empty: `az group list --query "[].name" -o tsv` returns nothing, and `az cognitiveservices account list-deleted` returns `[]`
-- [ ] T003 [P] Re-read the embedding quota live and record it: `az cognitiveservices usage list -l swedencentral --query "[?contains(name.value,'text-embedding-3-large')].{n:name.value,l:limit}" -o table`. Expected `Standard` **350**, `GlobalStandard` **0** — this decides one line of `infra/foundry.bicep` (research.md § R3)
-- [ ] T004 [P] Re-read the chat quota: `OpenAI.GlobalStandard.gpt4.1-mini` limit ≥ 10. Note the meter spells the model `gpt4.1-mini`, without the first hyphen
-- [ ] T005 Create the resource group: `az group create -n rg-ai300-rag -l swedencentral`. A **new** name, so `uniqueString(resourceGroup().id)` yields names no soft-deleted resource can shadow (research.md § R4)
-- [ ] T006 [P] Create `rag-optimization/rag-block5/` with `pyproject.toml`, pinning `azure-search-documents>=12.0.0,<13`, `azure-ai-evaluation>=1.18.3,<2`, `azure-identity>=1.19,<2`, `openai>=1.60,<2`, `tiktoken>=0.8,<1` (research.md § R10), then `uv sync`
-- [ ] T007 [P] Add `rag-optimization/rag-block5/runs/` to `.gitignore` — run files are regenerable from the index; the label set is not and stays tracked
+- [X] T001 Register the resource provider: `az provider register -n Microsoft.Search`, then poll `az provider show -n Microsoft.Search --query registrationState -o tsv` until it reports `Registered` — it was **`NotRegistered`** on 2026-08-27 and an unregistered provider fails deployment with `MissingSubscriptionRegistration`, which reads like an authorization refusal (research.md § R1)
+- [X] T002 [P] Confirm the subscription is still empty: `az group list --query "[].name" -o tsv` returns nothing, and `az cognitiveservices account list-deleted` returns `[]`
+- [X] T003 [P] Re-read the embedding quota live and record it: `az cognitiveservices usage list -l swedencentral --query "[?contains(name.value,'text-embedding-3-large')].{n:name.value,l:limit}" -o table`. Expected `Standard` **350**, `GlobalStandard` **0** — this decides one line of `infra/foundry.bicep` (research.md § R3)
+- [X] T004 [P] Re-read the chat quota: `OpenAI.GlobalStandard.gpt4.1-mini` limit ≥ 10. Note the meter spells the model `gpt4.1-mini`, without the first hyphen
+- [X] T005 Create the resource group: `az group create -n rg-ai300-rag -l swedencentral`. A **new** name, so `uniqueString(resourceGroup().id)` yields names no soft-deleted resource can shadow (research.md § R4)
+- [X] T006 [P] Create `rag-optimization/rag-block5/` with `pyproject.toml`, pinning `azure-search-documents>=12.0.0,<13`, `azure-ai-evaluation>=1.18.3,<2`, `azure-identity>=1.19,<2`, `openai>=1.60,<2`, `tiktoken>=0.8,<1` (research.md § R10), then `uv sync`
+- [X] T007 [P] Add `rag-optimization/rag-block5/runs/` to `.gitignore` — run files are regenerable from the index; the label set is not and stays tracked
 
 **Checkpoint**: provider registered, quotas known, resource group exists, local environment resolves.
 
@@ -50,28 +50,28 @@ already reported the wrong thing once ([research.md](./research.md) R1, R3, R8).
 
 ### The two template changes
 
-- [ ] T008 In `infra/foundry.bicep`, replace the `Cognitive Services OpenAI User` grant (lines 411–427) with **Foundry User** by GUID `53ca6127-db72-4b80-b1b0-d745d6d5456d`, at the account scope. Rewrite — do not delete — the comment block above it: the discovery of the `401` stays, with a new paragraph explaining that the role that *worked* was not the role that is *prescribed* (contracts/foundry-redeployment.md, change 1)
-- [ ] T009 In `infra/foundry.bicep`, add a `text-embedding-3-large` deployment: `sku.name` **`Standard`** (not `GlobalStandard` — T003), capacity 10, `model.version: '1'` pinned, `versionUpgradeOption: 'NoAutoUpgrade'`
-- [ ] T010 ⚠️ Chain T009's deployment into the existing dependency sequence so the order is `account → gpt-4.1-mini → text-embedding-3-large → project → account connection → project connection`. Two sibling `accounts/deployments` contend for the same account-level lock and race; block 4 paid four failed deployments to learn this, and neither `az bicep build` nor `what-if` can see it (research.md § R5, findings F1)
-- [ ] T011 Write `infra/search.bicep`: `Microsoft.Search/searchServices@2025-05-01`, `sku.name: 'free'`, `semanticSearch: 'free'`, `disableLocalAuth: true`, **`authOptions` omitted entirely** (the two are mutually exclusive), `replicaCount: 1`, `partitionCount: 1`, `hostingMode: 'default'` (contracts/search-service-and-index.md § 1)
-- [ ] T012 In `infra/search.bicep`, add two caller role assignments at the service scope, by GUID: **Search Service Contributor** `7ca78c08-252a-4471-8644-bb5ff32d4ba0` and **Search Index Data Contributor** `8ebe5a00-799e-43f5-93ac-243d3dce84a7`. Both are needed and the first is the non-obvious one — the data role alone cannot read `/servicestats`, which is SC-005's whole measurement (research.md § R7)
+- [X] T008 In `infra/foundry.bicep`, replace the `Cognitive Services OpenAI User` grant (lines 411–427) with **Foundry User** by GUID `53ca6127-db72-4b80-b1b0-d745d6d5456d`, at the account scope. Rewrite — do not delete — the comment block above it: the discovery of the `401` stays, with a new paragraph explaining that the role that *worked* was not the role that is *prescribed* (contracts/foundry-redeployment.md, change 1)
+- [X] T009 In `infra/foundry.bicep`, add a `text-embedding-3-large` deployment: `sku.name` **`Standard`** (not `GlobalStandard` — T003), capacity 10, `model.version: '1'` pinned, `versionUpgradeOption: 'NoAutoUpgrade'`
+- [X] T010 ⚠️ Chain T009's deployment into the existing dependency sequence so the order is `account → gpt-4.1-mini → text-embedding-3-large → project → account connection → project connection`. Two sibling `accounts/deployments` contend for the same account-level lock and race; block 4 paid four failed deployments to learn this, and neither `az bicep build` nor `what-if` can see it (research.md § R5, findings F1)
+- [X] T011 Write `infra/search.bicep`: `Microsoft.Search/searchServices@2025-05-01`, `sku.name: 'free'`, `semanticSearch: 'free'`, `disableLocalAuth: true`, **`authOptions` omitted entirely** (the two are mutually exclusive), `replicaCount: 1`, `partitionCount: 1`, `hostingMode: 'default'` (contracts/search-service-and-index.md § 1)
+- [X] T012 In `infra/search.bicep`, add two caller role assignments at the service scope, by GUID: **Search Service Contributor** `7ca78c08-252a-4471-8644-bb5ff32d4ba0` and **Search Index Data Contributor** `8ebe5a00-799e-43f5-93ac-243d3dce84a7`. Both are needed and the first is the non-obvious one — the data role alone cannot read `/servicestats`, which is SC-005's whole measurement (research.md § R7)
 
 ### Validation and first deployment
 
-- [ ] T013 `az bicep build -f infra/foundry.bicep` and `az bicep build -f infra/search.bicep`. Report warnings as warnings. This proves syntax and nothing else
-- [ ] T014 `az deployment group what-if` for both templates against `rg-ai300-rag`. Region eligibility and resource-name length surface here and nowhere earlier
-- [ ] T015 Deploy `infra/foundry.bicep` as `block5-001` with `callerPrincipalId=$(az ad signed-in-user show --query id -o tsv)`. On failure, capture `az deployment operation group list` and identify the **specific resource** before changing anything
-- [ ] T016 Deploy `infra/search.bicep` as `block5-search-001` with the same caller
-- [ ] T017 Verify the Log Analytics workspace was **created, not restored**: `az monitor log-analytics workspace show -g rg-ai300-rag -n <ws> --query createdDate -o tsv` returns today. A silent restore reports as a successful create (block 4 § F8)
+- [X] T013 `az bicep build -f infra/foundry.bicep` and `az bicep build -f infra/search.bicep`. Report warnings as warnings. This proves syntax and nothing else
+- [X] T014 `az deployment group what-if` for both templates against `rg-ai300-rag`. Region eligibility and resource-name length surface here and nowhere earlier
+- [X] T015 Deploy `infra/foundry.bicep` as `block5-001` with `callerPrincipalId=$(az ad signed-in-user show --query id -o tsv)`. On failure, capture `az deployment operation group list` and identify the **specific resource** before changing anything
+- [X] T016 Deploy `infra/search.bicep` as `block5-search-001` with the same caller
+- [X] T017 Verify the Log Analytics workspace was **created, not restored**: `az monitor log-analytics workspace show -g rg-ai300-rag -n <ws> --query createdDate -o tsv` returns today. A silent restore reports as a successful create (block 4 § F8)
 
 ### The plumbing the stories share
 
-- [ ] T018 Write `rag-optimization/rag-block5/chunk_corpus.py`: read `docs/exam-notes/*.md`, measure the token distribution with `tiktoken` **first** and print it (FR-002), then split on H2 boundaries and window sections over the cap at **512 tokens / 128 overlap**, emitting chunks with `chunk_id`, `note`, `heading`, `content`, `token_count`, `corpus_commit` (data-model.md § 2)
-- [ ] T019 Write `rag-optimization/rag-block5/create_index.py`: the index schema per data-model.md § 3 — searchable `content` and `heading`, filterable `note`/`token_count`/`corpus_commit`, `content_vector` as `Collection(Edm.Single)` at 3072 dimensions on an HNSW cosine profile, and one semantic configuration named `default` with `heading` as title and `content` as content
-- [ ] T020 Write `rag-optimization/rag-block5/service_stats.py`: reads `/servicestats` and `/indexes/<index>/stats` over the data plane with an Entra ID token from `az account get-access-token --scope https://search.azure.com/.default`, and prints raw JSON
-- [ ] T021 Run `service_stats.py` against the **empty** service and save the raw output. This is also the RBAC smoke test: a `403` here means T012's role split, not the tier
-- [ ] T022 Run `create_index.py` against the service and confirm the index exists with the semantic configuration attached
-- [ ] T023 Write `rag-optimization/rag-block5/embed_and_push.py`: embed each chunk with the `text-embedding-3-large` deployment through the `openai` SDK using an Entra token, and push documents over the data plane in batches. **No key anywhere** (contracts/search-service-and-index.md § 4)
+- [X] T018 Write `rag-optimization/rag-block5/chunk_corpus.py`: read `docs/exam-notes/*.md`, measure the token distribution with `tiktoken` **first** and print it (FR-002), then split on H2 boundaries and window sections over the cap at **512 tokens / 128 overlap**, emitting chunks with `chunk_id`, `note`, `heading`, `content`, `token_count`, `corpus_commit` (data-model.md § 2)
+- [X] T019 Write `rag-optimization/rag-block5/create_index.py`: the index schema per data-model.md § 3 — searchable `content` and `heading`, filterable `note`/`token_count`/`corpus_commit`, `content_vector` as `Collection(Edm.Single)` at 3072 dimensions on an HNSW cosine profile, and one semantic configuration named `default` with `heading` as title and `content` as content
+- [X] T020 Write `rag-optimization/rag-block5/service_stats.py`: reads `/servicestats` and `/indexes/<index>/stats` over the data plane with an Entra ID token from `az account get-access-token --scope https://search.azure.com/.default`, and prints raw JSON
+- [X] T021 Run `service_stats.py` against the **empty** service and save the raw output. This is also the RBAC smoke test: a `403` here means T012's role split, not the tier
+- [X] T022 Run `create_index.py` against the service and confirm the index exists with the semantic configuration attached
+- [X] T023 Write `rag-optimization/rag-block5/embed_and_push.py`: embed each chunk with the `text-embedding-3-large` deployment through the `openai` SDK using an Entra token, and push documents over the data plane in batches. **No key anywhere** (contracts/search-service-and-index.md § 4)
 - [ ] T024 **€** Run `embed_and_push.py` once. ≈55.000 tokens at 0,0002 €/1K ≈ **0,011 €**. Record the actual token count consumed
 
 **Checkpoint**: both templates deployed once, index populated, service statistics readable. All three stories can now proceed.
@@ -86,12 +86,12 @@ re-runnability survives the change.
 **Independent test**: deploy the template twice into the resource group and make
 one inference call. Needs no search service and no corpus.
 
-- [ ] T025 [US3] Deploy `infra/foundry.bicep` again as `block5-002`, **immediately**, with no manual step and no portal fix between the runs. Both outcomes recorded (FR-017, SC-008)
-- [ ] T026 [P] [US3] Deploy `infra/search.bicep` again as `block5-search-002`. Re-runnability is a property this repository tests rather than hopes for
-- [ ] T027 [US3] Confirm both model deployments are per-token: `az cognitiveservices account deployment list -n <account> -g rg-ai300-rag --query "[].{n:name,sku:sku.name}" -o table` shows `GlobalStandard` and `Standard`, and **no** name containing `Provisioned` (FR-018, spec constraint 5)
-- [ ] T028 [US3] Confirm no Cognitive Services role survives anywhere: `az role assignment list --scope <account-id> --query "[].roleDefinitionName" -o tsv` contains `Foundry User` and nothing beginning with `Cognitive Services` (FR-015)
-- [ ] T029 [US3] **€** Make one inference call under that role alone: `cd genaiops/foundry-block3 && uv run call_model.py`, reused unchanged. Fractions of a cent
-- [ ] T030 [US3] Record T029's outcome, **without having assumed it** (FR-016, SC-007). **Success** → `infra/foundry.bicep`'s grant becomes the only line in this repository both measured and prescribed; add the verification to `docs/exam-notes/foundry-rbac-and-authentication.md` § 3 and correct `genaiops/foundry-block3/README.md` where it documents the old path. **Failure** → write the finding: the verbatim refusal, the role assigned, the data action named, which of source and measurement is wrong — then restore the older grant **with the finding cited beside it**, never silently
+- [X] T025 [US3] Deploy `infra/foundry.bicep` again as `block5-002`, **immediately**, with no manual step and no portal fix between the runs. Both outcomes recorded (FR-017, SC-008)
+- [X] T026 [P] [US3] Deploy `infra/search.bicep` again as `block5-search-002`. Re-runnability is a property this repository tests rather than hopes for
+- [X] T027 [US3] Confirm both model deployments are per-token: `az cognitiveservices account deployment list -n <account> -g rg-ai300-rag --query "[].{n:name,sku:sku.name}" -o table` shows `GlobalStandard` and `Standard`, and **no** name containing `Provisioned` (FR-018, spec constraint 5)
+- [X] T028 [US3] Confirm no Cognitive Services role survives anywhere: `az role assignment list --scope <account-id> --query "[].roleDefinitionName" -o tsv` contains `Foundry User` and nothing beginning with `Cognitive Services` (FR-015)
+- [X] T029 [US3] **€** Make one inference call under that role alone: `cd genaiops/foundry-block3 && uv run call_model.py`, reused unchanged. Fractions of a cent
+- [X] T030 [US3] Record T029's outcome, **without having assumed it** (FR-016, SC-007). **Success** → `infra/foundry.bicep`'s grant becomes the only line in this repository both measured and prescribed; add the verification to `docs/exam-notes/foundry-rbac-and-authentication.md` § 3 and correct `genaiops/foundry-block3/README.md` where it documents the old path. **Failure** → write the finding: the verbatim refusal, the role assigned, the data action named, which of source and measurement is wrong — then restore the older grant **with the finding cited beside it**, never silently
 
 **Checkpoint**: US3 complete and independently demonstrable.
 
