@@ -76,6 +76,11 @@ rag-optimization/rag-block5/runs/
 # reproduces it byte for byte. Tracking it would be tracking the same text twice.
 rag-optimization/rag-block5/chunks.jsonl
 
+# The labelling reading copy. pool_for_labelling.py regenerates it from the runs
+# and the chunks, and it is never edited by hand - labels.jsonl beside it is the
+# artifact that is written into, and the only one no command can reproduce.
+rag-optimization/rag-block5/questions/worksheet.md
+
 # Personal study material: exam notes, flashcards, progress tracker.
 # Kept out of the repo deliberately - see the "*.local.md" convention.
 *.local.md
