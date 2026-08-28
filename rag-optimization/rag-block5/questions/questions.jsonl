@@ -1,0 +1,22 @@
+{"question_id": "q01", "query": "What does a GlobalStandard model deployment cost while it is idle?", "note": "foundry-cost-model.md", "kind": "answerable"}
+{"question_id": "q02", "query": "Which role should I assign to call a Foundry model deployment at inference time?", "note": "foundry-rbac-and-authentication.md", "kind": "answerable"}
+{"question_id": "q03", "query": "How much vector index storage does the Free tier of Azure AI Search allow?", "note": "rag-vector-store-and-indexing.md", "kind": "answerable"}
+{"question_id": "q04", "query": "How does reciprocal rank fusion merge keyword results with vector results?", "note": "rag-hybrid-search-and-ranking.md", "kind": "answerable"}
+{"question_id": "q05", "query": "What chunk size and overlap should I start with when preparing documents for retrieval?", "note": "rag-chunking-strategies.md", "kind": "answerable"}
+{"question_id": "q06", "query": "Which retrieval quality metrics can be computed without calling a judge model?", "note": "rag-retrieval-evaluation.md", "kind": "answerable"}
+{"question_id": "q07", "query": "When should I fine-tune a model instead of using retrieval augmented generation?", "note": "fine-tuning-vs-rag.md", "kind": "answerable"}
+{"question_id": "q08", "query": "Does a managed online endpoint keep billing when it receives no traffic?", "note": "online-endpoints.md", "kind": "answerable"}
+{"question_id": "q09", "query": "How do I detect that the input data reaching a deployed model has drifted?", "note": "model-monitoring-and-retraining.md", "kind": "answerable"}
+{"question_id": "q10", "query": "What is the difference between a Foundry hub and a Foundry project?", "note": "foundry-resource-model.md", "kind": "answerable"}
+{"question_id": "q11", "query": "Which hyperparameter sampling methods can be combined with an early termination policy?", "note": "hyperparameter-sweep.md", "kind": "answerable"}
+{"question_id": "q12", "query": "What does a managed virtual network cost while the workspace sits idle?", "note": "network-isolation.md", "kind": "answerable"}
+{"question_id": "q13", "query": "How do I read a trace back after the call that produced it has already finished?", "note": "genai-tracing.md", "kind": "answerable"}
+{"question_id": "q14", "query": "How do I record which version of a prompt produced a given response?", "note": "prompt-and-agent-versioning.md", "kind": "answerable"}
+{"question_id": "q15", "query": "What is the difference between tokens-per-minute quota and requests-per-minute throttling?", "note": "foundry-quota-and-rate-limits.md", "kind": "answerable"}
+{"question_id": "q16", "query": "Which VM size is cheapest for training a small scikit-learn model?", "note": "compute-cost-model.md", "kind": "answerable"}
+{"question_id": "q17", "query": "How much does semantic ranking cost per thousand queries?", "note": "rag-cost-model.md", "kind": "answerable"}
+{"question_id": "q18", "query": "How many results does the semantic reranker rescore in its second stage?", "note": "rag-hybrid-search-and-ranking.md", "kind": "answerable"}
+{"question_id": "q19", "query": "Which vector search algorithm consumes vector quota, and which one does not?", "note": "rag-vector-store-and-indexing.md", "kind": "answerable"}
+{"question_id": "q20", "query": "What is the difference between the Standard and GlobalStandard deployment types?", "note": "foundry-deployment-types.md", "kind": "answerable"}
+{"question_id": "q21", "query": "Which Azure OpenAI models support the Batch API, and what discount does batch processing apply?", "note": null, "kind": "control"}
+{"question_id": "q22", "query": "How do I run a red-team scan for jailbreak attempts against a deployed agent?", "note": null, "kind": "control"}
