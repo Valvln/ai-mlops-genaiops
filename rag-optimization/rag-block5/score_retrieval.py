@@ -99,18 +99,32 @@ def score_run(method: str, labels: dict[str, dict[str, int]]) -> dict:
     return per_question
 
 
+def metrics_of(result: dict) -> dict:
+    """The seven metrics, which are NOT top-level keys on the return value.
+
+    ⚠️ The evaluator returns a composite: `document_retrieval` and its score,
+    threshold and pass label sit at the top, and every metric this feature
+    actually reports — ndcg@3, fidelity, holes_ratio and the rest — is nested
+    one level down under `document_retrieval_properties`. Reading the top level
+    alone produces a table of one number per method that looks complete and
+    answers none of FR-011: the first run of this script did exactly that.
+    """
+    return result.get("document_retrieval_properties", result)
+
+
 def aggregate(per_question: dict) -> dict[str, float]:
     """Mean across questions, over every numeric metric the evaluator returned.
 
     Collected by inspection rather than by a hard-coded list so that a metric
     added by a future SDK version appears in the table instead of vanishing.
-    The `*_passed` booleans are excluded here and reported separately: they are
-    recorded and decide nothing.
+    The `*_passed` booleans and `*_threshold` constants are excluded: the first
+    are recorded and decide nothing, the second are not measurements at all.
     """
     sums = defaultdict(list)
     for result in per_question.values():
-        for key, value in result.items():
-            if isinstance(value, bool) or key.endswith("_result"):
+        for key, value in metrics_of(result).items():
+            if isinstance(value, bool) or key.endswith(
+                    ("_result", "_threshold", "_higher_is_better")):
                 continue
             if isinstance(value, (int, float)):
                 sums[key].append(float(value))
@@ -177,7 +191,7 @@ def main() -> int:
         "| --- | --- |" + " ---: |" * len(METHODS),
     ]
     for qid in sorted(questions):
-        cells = [f"{scored[m][qid].get('ndcg@3', float('nan')):.3f}"
+        cells = [f"{metrics_of(scored[m][qid]).get('ndcg@3', float('nan')):.3f}"
                  for m in METHODS]
         text.append(f"| {qid} | {questions[qid]['kind']} | "
                     + " | ".join(cells) + " |")
