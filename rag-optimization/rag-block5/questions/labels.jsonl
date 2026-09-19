@@ -51,11 +51,11 @@
 {"question_id": "q03", "chunk_id": "rag-vector-store-and-indexing--216", "query_relevance_label": null}
 {"question_id": "q03", "chunk_id": "rag-vector-store-and-indexing--220", "query_relevance_label": null}
 {"question_id": "q03", "chunk_id": "rag-vector-store-and-indexing--221", "query_relevance_label": null}
-{"question_id": "q04", "chunk_id": "genai-tracing--107", "query_relevance_label": null}
-{"question_id": "q04", "chunk_id": "prompt-and-agent-versioning--161", "query_relevance_label": null}
-{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--187", "query_relevance_label": null}
-{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--188", "query_relevance_label": null}
-{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--189", "query_relevance_label": null}
+{"question_id": "q04", "chunk_id": "genai-tracing--107", "query_relevance_label": 0}
+{"question_id": "q04", "chunk_id": "prompt-and-agent-versioning--161", "query_relevance_label": 0}
+{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--187", "query_relevance_label": 1}
+{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--188", "query_relevance_label": 2}
+{"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--189", "query_relevance_label": 2}
 {"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--190", "query_relevance_label": null}
 {"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--191", "query_relevance_label": null}
 {"question_id": "q04", "chunk_id": "rag-hybrid-search-and-ranking--192", "query_relevance_label": null}
