@@ -215,6 +215,49 @@ from the SDK return value does not. Choose the direct path, and say so.
 
 ---
 
+---
+
+## 7. Measured — Block 5, 2026-09-19
+
+`DocumentRetrievalEvaluator` was run over four retrieval methods against 378
+hand-and-assisted labels.
+
+**✅ VERIFIED — no judge, no deployment name, no model call.** § 2's table said
+Document Retrieval is the one evaluator needing `retrieval_ground_truth` and no
+`deployment_name`. Confirmed: the run made zero model calls and cost 0,00 €.
+Block 4's F5 cannot recur in this form, because there is no judge to have an
+opinion.
+
+**✅ VERIFIED — the SDK's defaults disagree with Learn's example.**
+`inspect.signature` on 1.18.3 reports `ground_truth_label_min=0,
+ground_truth_label_max=4`, where the documented example passes 1 and 5. Both were
+declared explicitly here as 0 and 3. This is why FR-009 existed.
+
+**✅ VERIFIED — § 5's seven thresholds, and they were right to be distrusted.**
+The evaluator carries `ndcg_threshold=0.5`, `xdcg_threshold=50.0`,
+`fidelity_threshold=0.5`, `top1_relevance_threshold=50.0`,
+`top3_max_relevance_threshold=50.0`, and both
+`total_*_documents_threshold=50`. Against those defaults three of four methods
+`fail` on `ndcg@3` and all four `fail` on `xdcg@3` — on a 22-question, 222-chunk
+corpus whose totals can never reach 50. The scores were reported; the labels
+decided nothing.
+
+**⚠️ FINDING — the metrics are not top-level keys.** The return value is a
+composite: `document_retrieval*` at the top, and `ndcg@3`, `fidelity`,
+`holes_ratio` and the rest nested under **`document_retrieval_properties`**.
+Averaging the top level produces one plausible number per method and silently
+drops everything this note is about. Not documented on the reference page.
+
+**✅ VERIFIED — § 3's worked example reproduced in kind.** Learn pairs `ndcg@3`
+0.646 `pass` with `fidelity` 0.019 `fail`. Measured here on q08: `fidelity` 0.89
+against `ndcg@3` 0.143 — the answer retrieved and buried. Different direction,
+same lesson, on real data.
+
+**Not exercised**: § 4's parameter sweep across chunk sizes and `top_k`. Only the
+search-algorithm axis was varied.
+
+See `specs/008-rag-retrieval-quality/findings.md` F5.
+
 ## Sources
 
 - [RAG evaluators for generative AI (Microsoft Foundry)](https://learn.microsoft.com/en-us/azure/ai-foundry/concepts/evaluation-evaluators/rag-evaluators) — read 2026-08-27; all sections, every quotation and table

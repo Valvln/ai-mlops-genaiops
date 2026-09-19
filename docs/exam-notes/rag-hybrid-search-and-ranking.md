@@ -319,6 +319,51 @@ omits, which is the other useful outcome the amended constitution anticipates.
 
 ---
 
+---
+
+## 8. Measured — Block 5, 2026-08-28
+
+Four query shapes over one index of 222 chunks, 22 questions, scored against
+labels with `DocumentRetrievalEvaluator`.
+
+**✅ VERIFIED — semantic ranking runs on the Free tier.** The headline of this
+note held. `semanticSearch: 'free'` deployed, the semantic configuration engaged,
+and 22 semantic queries ran at 0,00 €.
+
+**⚠️ FINDING — the regional gate this note does not mention.** Free-tier semantic
+ranking depends on the **region** as well as the plan. Sweden Central carries the
+footnote; `northeurope` — this repository's documented default everywhere else —
+does not, and additionally cannot create new search services at all. Neither fact
+is visible to `az bicep build`, and this note should carry the region caveat next
+to the tier claim.
+
+**⚠️ FINDING — RRF fusion ranked worse than its own vector leg.**
+
+| Method | ndcg@3 | fidelity |
+| --- | ---: | ---: |
+| `keyword` | 0.472 | 0.646 |
+| `vector` | **0.579** | 0.816 |
+| `hybrid` | **0.545** | 0.816 |
+| `hybrid_semantic` | 0.601 | 0.843 |
+
+Learn's claim is about `hybrid_semantic`, which won. What is contradicted is the
+looser framing that hybrid dominates both of its legs: on this corpus it did not.
+**The margin is the new fact** — +27 % over keyword, **under 4 % over plain
+vector**, where Learn publishes no margin at all.
+
+**✅ VERIFIED — § 4's three ranges under two property names**, and the SDK adds a
+wrinkle. `keyword`, `vector` and `hybrid` all returned `@search.score`;
+`hybrid_semantic` returned `@search.rerankerScore`. The Python SDK exposes the
+latter under **both** `@search.rerankerScore` and `@search.reranker_score`,
+carrying identical values. Observed on one semantic result: `@search.score` 8.11
+ranked *below* 9.87 while its reranker score was higher — the L2 pass reordering
+its input, visible in one row.
+
+**Not exercised**: the 50-document L2 ceiling (§ 3), which does not bind at top-10,
+and query rewrite.
+
+See `specs/008-rag-retrieval-quality/findings.md` F7.
+
 ## Sources
 
 - [Hybrid search overview](https://learn.microsoft.com/en-us/azure/search/hybrid-search-overview) — read 2026-08-27; §§ 1, 6

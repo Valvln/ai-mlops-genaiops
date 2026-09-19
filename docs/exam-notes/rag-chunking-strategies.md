@@ -224,6 +224,36 @@ the shape of the trade-off. Figures in `rag-cost-model.md` § 3.
 
 ---
 
+---
+
+## 8. Measured — Block 5, 2026-08-27
+
+**✅ VERIFIED — the two recommendations are genuinely inconsistent, and only one
+can be followed.** § 2 records Learn publishing 512 tokens / 25 % overlap and
+200 words / 10–15 % overlap on the same page. **512 / 128 was followed**; the
+other was not. The reason is the corpus measurement rather than preference: at a
+mean of 3 649 tokens per note with most H2 sections already under the cap, a
+200-word window would have cut nearly every section into three or four pieces to
+no purpose.
+
+**The inconsistency is not resolved by this block.** Resolving it needs a
+chunk-size sweep, which re-embeds the whole corpus once per cell — the expensive
+axis, where varying the retrieval method is the cheap one. Out of scope by
+decision, and recorded as such.
+
+**✅ VERIFIED — § 2's overlap arithmetic, on real text.** 512/128 produced 222
+chunks from 65 688 tokens and **72 711 tokens to embed — 1,11×** the corpus. The
+note's claim that overlap is paid twice, at the embedding meter and in the index,
+held at both.
+
+**⚠️ FINDING — `tiktoken` underestimates the billed count.** Local count 72 711,
+service billed **73 249**: a 0,74 % gap, one-directional. Small, and worth
+knowing before a local count is used to predict a bill.
+
+**Not exercised**: the Text Split skill itself, `sentences` mode, and every
+figure in § 4's parameter table — this block chunked locally and pushed, so none
+of the skill's behaviour was touched.
+
 ## Sources
 
 - [Chunk documents for vector search](https://learn.microsoft.com/en-us/azure/search/vector-search-how-to-chunk-documents) — read 2026-08-27; §§ 1–6, all quotations and both tables
