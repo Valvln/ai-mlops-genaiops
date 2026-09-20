@@ -5,12 +5,12 @@ Operationalizing Machine Learning and Generative AI Solutions**. I use it to
 build the exam topics as working artifacts instead of reading about them, so
 everything here is something I can run, validate, and explain.
 
-I develop it on a Pay-As-You-Go subscription with the spending limit off. I
-spent the first three features believing it was a free trial, and checking
-turned out to matter: no credit absorbs these figures, and nothing stops a bill
-automatically. That is what my design decisions are actually protecting against
-— cheapest viable SKU, nothing left running, and as much validated locally as
-possible before anything touches Azure.
+I develop it on a Pay-As-You-Go subscription with the spending limit off. My 
+design decisions are actually protecting against what bills even if stopped. 
+It means:
+* cheapest viable SKU 
+* nothing left running 
+* as much validated locally as possible before anything touches Azure.
 
 ## How I work
 
@@ -18,25 +18,18 @@ I drive this repository spec-first, using [GitHub Spec Kit](https://github.com/g
 with Claude Code as the implementation tool.
 
 For each unit of work I write a specification containing the objective, the
-requirements, and — the part I care most about — **success criteria that a
-command can verify**. Not "the template should be correct", but
-`az bicep build` exits 0 and the compiled output contains exactly 2 resources.
-Claude Code implements against that spec; I review the diff, run the validation
-myself, and authorize every commit individually. Nothing is committed or pushed
-on my behalf without my explicit approval.
+requirements, and **success criteria that a command can verify**. I review the 
+diff and run the validation myself.
 
 The rules I hold this repo to are written down in
-[`.specify/memory/constitution.md`](.specify/memory/constitution.md). The ones
-that bite most often:
+[`.specify/memory/constitution.md`](.specify/memory/constitution.md), and the most 
+recurrent are:
 
-- **Cost discipline** — every exercise declares whether it runs locally (free) or
+- **Cost discipline**: every exercise declares whether it runs locally (free) or
   needs Azure, and anything that could add cost gets flagged with an estimate
   before it is built.
-- **Validation before commit** — no IaC or CI change is proposed for commit until
+- **Validation before commit**: no IaC or CI change is proposed for commit until
   its validation step actually passes.
-- **Source of truth only** — generated artifacts are never tracked in git.
-
-This is deliberate practice for me: the interesting skill is specifying work precisely enough that correctness becomes checkable, and then actually checking it.
 
 ## What is built so far
 
@@ -44,70 +37,65 @@ This is deliberate practice for me: the interesting skill is specifying work pre
 
 A minimal but opinionated baseline: a Storage Account and a Key Vault.
 
-The decisions I made and why:
-
-- **Key Vault uses RBAC authorization**, not access policies — the access-policy
+- **Key Vault uses RBAC authorization**, not access policies: the access-policy
   model is legacy and does not compose with Azure's wider identity story.
 - **The tenant ID is never hardcoded.** It comes from `subscription().tenantId`,
   so the template is portable across tenants.
 - **Resource names are generated** with `uniqueString(resourceGroup().id)`,
   because storage account and vault names must be globally unique.
-- **Soft delete, at first with 90-day retention and purge protection enabled** —
+- **Soft delete, at first with 90-day retention and purge protection enabled**:
   purge protection is irreversible once on. The template no longer enables it, for
   reasons further down.
-- **`Standard_LRS` and TLS 1.2 minimum** — the cheapest redundancy tier is the
+- **`Standard_LRS` and TLS 1.2 minimum**. The cheapest redundancy tier is the
   right default for learning; the TLS floor is not something to leave at default.
 
 I then extended the baseline with an Azure ML workspace, plus the Application
 Insights and Log Analytics resources it depends on.
 
 - **No Container Registry, to begin with.** The workspace can provision one for
-  itself, and I did not let it: roughly $5/month for something no exercise needed
+  itself, and it was not allowed: roughly $5/month for something not needed
   yet. That decision held until an exercise finally needed one, at which point
-  the platform created it without asking — so the template declares it now. The
-  reasoning is further down.
+  the platform created it without asking. 
 - **A system-assigned managed identity**. The Key Vault was already on RBAC,
-  so granting roles to that identity is the natural next step — no secrets,
-  nothing to rotate.
+  so granting roles to that identity is the natural next step.
 - **Application Insights is workspace-based, so a Log Analytics workspace came
   with it.** Classic Application Insights is retired; a component without a
   backing workspace still compiles but is rejected on deployment. This is why
-  the template has five resources and not the four I first specified — I changed
-  the spec rather than ship something that only looked correct.
+  the template has five resources and not the four first specified.
 - **I did not take the newest API version for Log Analytics.** The provider
   offers `2026-03-01`, but no Bicep release has type definitions for it yet, so
-  using it means `az bicep build` stops checking that resource's properties. I
-  took `2025-07-01` instead: eight months older, fully type-checked. Validation
-  I can actually run beats a newer version number.
+  using it means `az bicep build` stops checking that resource's properties. 
+  `2025-07-01` was taken instead: eight months older, fully type-checked. 
 
 Everything above was validated locally with `az bicep build` before anything
 touched Azure.
 
-The compiled ARM JSON is **not** tracked. `main.bicep` is the source of truth and
+The compiled ARM JSON is **not** tracked. `main.bicep` is the primary source and
 the JSON is a build artifact, so it lives in `.gitignore`.
+
+---
 
 ### The first deployment
 
 I have since deployed this template for real, into a throwaway resource group.
-[`infra/DEPLOY.md`](infra/DEPLOY.md) is the runbook: I wrote it before the
-deployment and revised it immediately afterwards, so every expected value in it
-is now an observed one.
+[`infra/DEPLOY.md`](infra/DEPLOY.md) is the runbook: It was written it before 
+the deployment and revised immediately afterwards, so every expected value in 
+it is now an observed one.
 
-The deployment is what taught me the difference I had until then only been
+The deployment is what taught the difference it was until then only been 
 asserting. Two defects were latent in a template that compiled without a single
 warning and had passed CI:
 
 - **The storage account name was one character over its limit.** `ai300storage`
   plus a 13-character `uniqueString()` is 25 characters, against a hard cap of
-  24. I had checked name length for the ML workspace and generalised from it —
-  and the storage account turns out to have the tightest limit of the five.
+  24. 
   Bicep does not validate name length at all.
 - **`managedNetwork` was left to a service default I had never actually seen.**
   I assumed `what-if` would reveal it. It does not: `what-if` renders what the
   template declares, not what the resource provider applies at creation time.
-  The stake was not academic — `AllowOnlyApprovedOutbound` provisions a managed
-  firewall billed hourly whether or not anything uses it. The template now pins
-  `Disabled` explicitly.
+  It was not just a theoretical issue: `AllowOnlyApprovedOutbound` provisions 
+  a managed firewall billed hourly whether or not anything uses it. The template 
+  now pins `Disabled` explicitly.
 
 Two further things were decided by the subscription rather than by the template:
 `westeurope` rejects every resource here with `RequestDisallowedByAzure`, a
@@ -115,22 +103,18 @@ capacity restriction Azure applies to new customers, which is why the default
 region is now `northeurope`; and all five resource providers started out
 unregistered, which fails a deployment immediately.
 
-At rest this deployment should cost approximately nothing — none of the five
-resources carries a fixed monthly fee. I checked that in Cost Management rather
-than trusting the table, because a figure that is not near zero would mean
-something was provisioned that the template never declared. It is zero: only the
+At rest this deployment should cost approximately nothing. I checked that in 
+Cost Management, because a figure that is not near zero would mean something was 
+provisioned that the template never declared. Confirmed at zero: only the
 storage account and the vault have usage records at all, both at no charge.
 
 The resource count, on the other hand, was wrong. My runbook said the group
 should contain five resources; it contains six. Application Insights deployed a
-notification group for itself ten minutes after the workspace — its own
-deployment, which I did not ask for and which is recorded in the deployment
-history as having failed. It costs nothing, but it is the same habit that later
-defeated the identity work below: this platform provisions things the template
-never mentions.
+notification group for itself ten minutes after the workspace. It costs nothing, 
+but This same pattern subsequently compromised the identity construction 
+discussed below: this platform provisions things the template never mentions.
 
-So the template compiles, and it also deploys. Those turned out to be genuinely
-different claims.
+The template compiles, and it also deploys. 
 
 ### What the workspace identity taught me — a feature that failed
 
