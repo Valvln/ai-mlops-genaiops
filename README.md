@@ -210,7 +210,23 @@ The generative half starts here, and I kept it deliberately small: one token-bil
 
 The permissions were wrong in both directions at once. I expected to need a reader role for traces and nothing to call the model; the subscription said the opposite — Owner carries every control-plane action and no data action, so querying Log Analytics passed on the first try while chat completions came back 401 until I granted a role built for exactly that call. Which plane guards an API, I learned, comes off the refusal, not off how powerful the role sounds. One permission I left refused on purpose: reading the project's own telemetry connection would have meant handing over an entire data plane for a single lookup, a custom role that would outlive the resource group built to leave none — I read the connection string from App Insights instead.
 
-The defect worth keeping showed up in the tracing, not the permissions: my first version let telemetry ship whatever it had at exit, which for a short CLI means most of it never gets sent. Choosing the model taught the smaller version of the same lesson: the catalog says what a region offers, only the quota API says what I can actually deploy, and the cheaper model I'd picked in advance had a quota of zero. One criterion is still open — the measured cost of an idle day — and leaving the group standing overnight to earn that number isn't the "never leave anything running" rule being bent, since there's no compute here to bend it against; it's a number I'm still waiting on Cost Management to confirm.
+The defect worth keeping showed up in the tracing, not the permissions: my first version let telemetry ship whatever it had at exit, which for a short CLI means most of it never gets sent. Choosing the model taught the smaller version of the same lesson: the catalog says what a region offers, only the quota API says what I can actually deploy, and the cheaper model I'd picked in advance had a quota of zero. One criterion was still open when I wrote this — the measured cost of an idle day — and leaving the group standing overnight to earn that number wasn't the "never leave anything running" rule being bent, since there's no compute here to bend it against. It came back zero, and the way it came back is the part I kept: an absent row in Cost Management is missing data, not a confirmed zero, and what makes an absence readable is a second resource group known to be billing on the same day.
+
+### `qa-observability/` — judging the answers, and losing the judgements
+
+The next question is the one that follows from a retrievable call: not *what did the model say*, but *was it any good*. Evaluation itself went well — an evaluator scoring answers against ground truth, thresholds that fail a run rather than decorate it, and eight findings written down while building. What did not go well is where the judgements ended up. The evaluation spans are accepted with an HTTP 200 and then never appear in Log Analytics, and I closed the feature with that open rather than pretending otherwise: the client, the evaluation SDK, the sampling configuration and every plausible table were eliminated one at a time, and service-side adaptive sampling is the one hypothesis I could not test. Twenty-seven tasks of thirty-four, with the seven left undone named and explained.
+
+Stopping there was a decision, not an omission. Two of the remaining verifications depend on the missing spans, so finishing them would have meant asserting something I could not observe — and this repository has already shipped two defects that passed a check while missing its point. An honest gap in the write-up costs less than a criterion marked green on faith.
+
+### `rag-optimization/` — four ways to search, and the margin between them
+
+The last block asks what sits upstream of everything above: how much does retrieval quality actually change with the shape of the query. Eighteen notes cut into 222 chunks, one index, four methods — keyword, vector, hybrid, hybrid with semantic ranking — and 378 relevance labels I assigned by hand, because a measurement of ranking quality made by the thing being ranked is not a measurement. The whole indexing bill was 0,0146 €: the Free tier of AI Search, chosen before the spec froze rather than after the invoice.
+
+The documented ordering held at the top and broke in the middle. Semantic ranking won, as Microsoft says it does — but plain vector search beat hybrid, so fusing a keyword leg into a vector query made the ranking *worse* than the vector query alone. The number worth carrying is the margin nobody publishes: **+27 % over keyword, under 4 % over plain vector.** On a corpus this size, the expensive stage buys less than the cheap one.
+
+Two smaller lessons outlived the table. One question had every method find the right material and none of them rank it in the top three — recall alone calls that a success, ranking alone calls it a total failure, and only the pair says what actually happened. And the first version of my scoring script produced four ascending numbers in the expected order, all wrong: it was averaging a composite metric while the seven real ones sat nested a level below. A results table that agrees with the hypothesis is the single most dangerous artifact this project has produced.
+
+This block was also the first built under a rule added to the constitution the same week: read the documentation into `docs/exam-notes/` **before** the plan freezes, so that measuring afterwards either confirms a source or contradicts one. It was adopted because of a measurement — a role that worked and that Microsoft advises against — and it paid for itself here, where two of the findings are precisely the gap between what is published and what I observed.
 
 ### `.github/workflows/` — validation and deployment
 
@@ -224,16 +240,6 @@ dispatch. Authenticates over OIDC against a federated credential bound to the
 `azure-deploy` environment, so a run that has not passed the approval gate cannot
 obtain a token. A second job runs the four boundary probes as assertions; a probe
 that succeeds fails the run.
-
-## What is planned
-
-These areas are scaffolded but not yet built out. They will appear here as I work
-through the exam objectives:
-
-| Folder              | Scope                                        |
-| ------------------- | -------------------------------------------- |
-| `qa-observability/` | Quality assurance, monitoring, observability |
-| `rag-optimization/` | Retrieval-augmented generation               |
 
 ## Running the validation locally
 
