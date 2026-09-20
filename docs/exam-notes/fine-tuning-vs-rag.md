@@ -239,6 +239,31 @@ the same paragraph — see `rag-cost-model.md` § 5.
 
 ---
 
+---
+
+## 6. Measured — Block 5, 2026-09-19
+
+**✅ VERIFIED by decision, not by experiment — fine-tuning was priced and not
+run.** § 3's 1,4937 €/hour hosting charge, flat across model sizes, is what
+decided it: 35,85 €/day for a deployment that answers nothing until it is
+deleted, against a whole block whose measured cost was **0,015 €**. The ratio is
+roughly 2 400 : 1 for one day of hosting.
+
+Verified by listing rather than by recollection: no `*-ft` deployment exists on
+the account, and no training job was ever submitted.
+
+**✅ VERIFIED — the ladder's first rung is where this block stayed.** § 2 records
+Learn placing prompt engineering first, then RAG, then fine-tuning. This block
+worked entirely at the RAG rung and measured what it buys: **+27 % ndcg@3 from
+keyword to hybrid-with-semantic-ranking**, for 0,015 € and no hosted model. That
+number is the concrete form of § 2's argument, and it is the comparison the note
+could not previously make.
+
+**Not exercised, and still theory**: SFT, DPO and RFT (§ 4), the 50–100 example
+starting volume, serverless versus managed compute, and every claim about what
+fine-tuning does to output style. The note's status line stays «documented, not
+measured» for those.
+
 ## Sources
 
 - [Getting started with customizing a large language model (LLM) (classic)](https://learn.microsoft.com/en-us/azure/foundry-classic/openai/concepts/customizing-llms) — read 2026-08-27; §§ 1, 2, 3

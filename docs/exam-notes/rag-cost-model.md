@@ -218,6 +218,39 @@ other group in the same subscription does.
 
 ---
 
+---
+
+## 7. Measured — Block 5, 2026-08-27 onward
+
+**✅ VERIFIED — the Free tier is 0,00 €/day, and «Free tier or nothing» held.**
+The service ran for the whole block at no charge, with semantic ranking on the
+free plan. § 1's decision was not revisited and no tier upgrade was needed.
+
+**✅ VERIFIED — § 3's embedding rate, to the cent.** 73 249 tokens of
+`text-embedding-3-large` on a regional `Standard` deployment in `swedencentral`
+cost **0,0146 €**, against 0,0002 €/1K. The whole retrieval side of the block —
+four methods, 22 questions, 88 queries — added 0,00006 € in query embeddings and
+nothing else.
+
+**⚠️ FINDING — a model advertised by the catalog can have zero quota.**
+`az cognitiveservices model list` reports `text-embedding-3-large` in
+`swedencentral` as `Standard,GlobalStandard,DataZoneStandard`. `az
+cognitiveservices usage list` reports quota **350 / 0 / 0**. The catalog answers
+"does this SKU exist in this region"; only the usage list answers "can this
+subscription deploy it". `GlobalStandard` would have compiled, passed review, and
+failed on `InsufficientQuota` — the same shape that cost feature 006 two failed
+what-ifs on `gpt-5-nano`.
+
+**⚠️ FINDING — the vector index is 3× the documented formula.** See
+`rag-vector-store-and-indexing.md` § 8. Relevant here because it moves the point
+at which the Free tier stops being viable: ~1 300 chunks, not ~4 200.
+
+**✅ VERIFIED — no fine-tuning artifact was created.** § 4's 1,4937 €/hour hosting
+rate ended the discussion at plan time and was never tested, by design.
+
+**Pending**: § 5's teardown commands and the idle-day Cost Management reading are
+the block's last two tasks and are not yet run.
+
 ## Sources
 
 - Azure Retail Prices API — `serviceName eq 'Azure Cognitive Search'`, northeurope, EUR — read 2026-08-27; §§ 1, 2

@@ -358,6 +358,53 @@ accepting rather than a compromise.
 
 ---
 
+---
+
+## 8. Measured — Block 5, 2026-08-27/28
+
+The two open questions in §§ 4–5 were both settled against a live free service.
+
+**⚠️ FINDING — the Free tier's vector quota is `null`, not a number.** § 4 asked
+for `/servicestats` to publish what the limits table omits. It does not:
+
+```text
+"storageSize":     { "usage": 0, "quota": 52428800 },
+"vectorIndexSize": { "usage": 0, "quota": null }
+```
+
+The inference in § 4 — that the 50 MB service storage limit binds first — is
+therefore supported **by elimination**, because no competing limit exists, and
+not by a figure the service publishes. That is weaker evidence than § 4 hoped
+for, and the distinction matters. `documentCount.quota` is `null` for a different
+reason: the published 10,000 is a per-**indexer-invocation** limit, and a
+push-based feature runs no indexer.
+
+**⚠️ FINDING — the § 4 size formula underestimates by 3×.** 222 documents at 3072
+dimensions predicted 2 727 936 B. Measured `vectorIndexSize`: **8 222 516 B**, a
+ratio of **3,01** — 37 038 B per document against 12 288 B of raw `float32`. The
+formula prices the vectors and not the HNSW graph, and the `algorithm_overhead`
+multiplier it quotes has no published value, so what a reader computes from it is
+the raw size alone. **The 50 MB limit binds at roughly 1 300 chunks of this
+shape**, not the ~4 200 the raw formula suggests.
+
+**✅ VERIFIED — every other Free-tier figure in § 5.** `/servicestats` returned
+quotas of 3 for indexes, indexers, data sources, skillsets and synonym maps, and
+`maxFieldsPerIndex` 1 000 — confirming the table's row that Basic, not Free, is
+the tier with the lower 100-field cap.
+
+**✅ VERIFIED — § 5's managed-identity restriction, by its consequence.** The
+credential-less path held: chunking and embedding ran locally and documents were
+pushed with an Entra token, so option 1 of § 5's three was taken and the
+key-bearing downgrade stayed dormant. What was *not* exercised: indexers,
+skillsets, and integrated vectorization.
+
+**⚠️ FINDING — index statistics lag ingestion.** Immediately after 222 successful
+pushes the endpoint still reported `documentCount: 0` while a direct query
+counted 222. The statistics endpoint says how much room was taken, not whether
+ingestion succeeded.
+
+See `specs/008-rag-retrieval-quality/findings.md` F1, F2, F3.
+
 ## Sources
 
 - [Vector search overview](https://learn.microsoft.com/en-us/azure/search/vector-search-overview) — read 2026-08-27; §§ 1, 2
