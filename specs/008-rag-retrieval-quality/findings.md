@@ -296,3 +296,115 @@ used to predict a bill.
 **Which is wrong**: the estimate, and it was never presented as anything else.
 FR-002 exists precisely so the measurement precedes the cut rather than
 justifying it afterwards.
+
+---
+
+## F9 — The idle-day cost result inverts what SC-010 predicted, and is stronger
+
+**Severity**: none — the criterion is met, by the opposite evidence to the one it
+described.
+
+SC-010 expected «a line for the Foundry account, **no line** for the search
+service», with the chat call supplying a control that proves the dataset is not
+simply absent. Measured 2026-09-20 for the window 18–20 September, at resource
+granularity:
+
+```text
+POST https://management.azure.com/subscriptions/<sub>
+     /providers/Microsoft.CostManagement/query?api-version=2023-11-01
+
+columns: [Cost, UsageDate, ResourceId, Currency]
+  0.0  20260918  microsoft.search/searchservices/ai300srch…
+  0.0  20260919  microsoft.search/searchservices/ai300srch…
+  0.0  20260920  microsoft.search/searchservices/ai300srch…
+```
+
+**The search service is the only resource with a line, and its cost is exactly
+`0.0` on all three days.** The Foundry account — which did receive a deliberate
+chat call on the 20th — has no line at all.
+
+**Which is wrong**: the criterion's assumption about how the two resources would
+appear. It assumed absence meant free and presence meant billed. The reality is
+the reverse of both halves:
+
+- The free search service **emits a metered line at 0,00 €**, which is a
+  *stronger* result than silence: a row that says zero is a measurement, where a
+  missing row would have been indistinguishable from uningested data. The thing
+  SC-010 built a control to guard against did not need guarding.
+- The Foundry account emits **nothing** for 346 tokens of chat. Per-token spend
+  below the rounding floor does not produce a row, so the intended control line
+  never materialised.
+
+**Consequence for the control design.** The control worked as a *method* and
+failed as an *artifact*: it is the presence of the search service's zero row that
+proves this dataset is real, not the chat call. On a subscription where every
+meter is this small, a deliberate call is not a reliable way to manufacture a
+control line — a resource that bills nothing but reports zero is.
+
+⚠️ **Two tooling notes, both of which cost time.** `az costmanagement query` no
+longer exists: extension version 1.0.0 exposes only `export` and
+`show-operation-result`, so the query runs through `az rest` against the REST API
+directly. And the API throttles hard — `429 Too many requests` on repeated calls,
+which took three attempts at 45-second intervals to clear for one query and never
+cleared for a second. Budget for that rather than reading a 429 as a failure.
+
+---
+
+## F10 — A soft-deleted Log Analytics workspace cannot be purged after its resource group is gone
+
+**Severity**: the residue is permanent for 30 days and cannot be removed. It does
+not bill. Block 4's F8 remedy does not work in this ordering.
+
+`tasks.md` T057 prescribes the block 4 remedy: delete the group, then force-delete
+the workspace if it appears in the soft-deleted list. Run in that order:
+
+```text
+az group delete -n rg-ai300-rag --yes                              # Succeeded
+az monitor log-analytics workspace list-deleted-workspaces
+  ai300fdrylawqcqpauycu74fk   swedencentral   rg-ai300-rag   30     # still there
+
+az monitor log-analytics workspace delete -g rg-ai300-rag \
+    -n ai300fdrylawqcqpauycu74fk --force true --yes
+  exit=0                                                            # NO output, NO error
+```
+
+**The force-delete reported success and did nothing.** The workspace was still
+listed 90 seconds later, and still listed after that. Going to the REST API
+directly produced the error the CLI had swallowed:
+
+```text
+DELETE .../resourceGroups/rg-ai300-rag/providers/Microsoft.OperationalInsights
+       /workspaces/ai300fdrylawqcqpauycu74fk?api-version=2023-09-01&force=true
+
+ResourceGroupNotFound: Resource group 'rg-ai300-rag' could not be found.
+```
+
+**Cause**: the purge operation is addressed **through the resource group**. Once
+the group is deleted the path no longer resolves, and there is no group-less route
+to a soft-deleted workspace. The ordering in T057 — group first, purge second — is
+therefore unexecutable as written.
+
+**Which is wrong**: the task, inherited from block 4 § F8. F8 was observed in a
+situation where the workspace was restored into a group that still existed, and
+the remedy was written for that case. It does not generalise to teardown.
+
+**The correct ordering**, for the next block:
+
+```bash
+az monitor log-analytics workspace delete -g <rg> -n <ws> --force true --yes  # FIRST
+az group delete -n <rg> --yes                                                 # then
+```
+
+**⚠️ And the CLI's silence is the real defect.** `--force true` against a missing
+group exits `0` with no output. A teardown script that checks exit codes would
+report a clean purge; only listing the workspaces afterwards shows otherwise. This
+is the fifth time in this repository that a command has passed while its objective
+was missed.
+
+**Cost impact: none, verified.** `az resource list` across the subscription
+returns nothing, the account purge *did* succeed
+(`az cognitiveservices account list-deleted` is empty), and a soft-deleted
+workspace holds no meter — it is a recovery record with a 30-day window, after
+which it disappears on its own. SC-009 is met on the criterion it states
+(`az group exists` → `false`, `az resource list -g` → `ResourceGroupNotFound`),
+with this residue recorded rather than hidden.
