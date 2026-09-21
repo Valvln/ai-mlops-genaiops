@@ -116,79 +116,125 @@ discussed below: this platform provisions things the template never mentions.
 
 The template compiles, and it also deploys. 
 
-### What the workspace identity taught me — a feature that failed
+### The rise and fall of Workspace Identity
 
-Let's name the failure upfront: I tried to shrink a managed identity down to only what it needed. I did not succeed — and I am keeping the attempt in the repository, because the reason it failed is worth more than the feature would have been.
+I restricted the managed identity to its required permissions. I did not succeed.
+The attempt is kept in the repository.
+The identity already held four role assignments no template had ever declared, 
+including a wildcard permission across the whole resource group. Thus, the 
+objective was never to provide a baseline, but to revoke what had been extended 
+without request.
 
-The identity already held four role assignments no template had ever declared, one of them a wildcard grant over the whole resource group. So the task was never "grant the minimum"; it was "take back what had been granted without asking."
+Two assumptions fell apart. 
+1. Empty credentials doesn't mean the data stores don't use them, but only that 
+the tool hides them. 
+2. Already-deployed template showed changes on a clean run. 
 
-Two assumptions fell apart along the way. Empty credentials, I learned, mean the tool hides them — not that the data stores don't use them. And one of my success criteria could never have passed: even the old, already-deployed template showed changes on a clean run. Comparing against that baseline before trusting any result is the one habit worth keeping.
+The single best habit to keep is comparing everything to a reference point before 
+believing the output.
 
-Then the real lesson. I removed the platform's grant; it quietly recreated it under a new name. I told it to stop assigning permission at the resource-group level; it obeyed the letter and split one broad grant into three narrow ones — same authority, better disguised. One of my checks turned green on exactly that outcome, because it was only ever reading a word in a scope string, not the reach it claimed to measure. A test can pass while the thing it exists to guarantee never happens.
+Most important lesson: after the platform's grant was removed, it quietly recreated
+it under a new name. When told to stop assigning resource-group level permissions, 
+it satisfied the literal requirement by breaking a single broad grant into three 
+specific ones. he check passed for that scenario simply because it scanned a word 
+within the scope string, rather than evaluating the actual reach. 
+Unfortunately, I cannot adjust these permissions myself, as their management is 
+controlled by the platform.. Using a user-assigned identity might avoid this, and 
+since the vault's 90-day rule forces a new resource group, I'll need to rebuild the 
+workspace anyway.
 
-The honest conclusion is negative: these permissions are the platform's to manage, not mine to trim. A user-assigned identity might escape that — but it stays written down as a question, not an answer, and I am not spending a session to settle it. I have to rebuild this workspace anyway when the vault's 90-day trap forces a new resource group; changing one line of Bicep then costs nothing. Deferring a cheap experiment until it becomes free is itself a decision worth making on purpose.
+The workspace now authenticates through its own identity instead of account keys.
+The template still includes an unused role assignment for the Key Vault, named 
+deterministically so redeployment is idempotent.
 
-What the attempt did leave behind is real: the workspace now authenticates through its own identity instead of account keys, the reasoning is on record for whoever reads this next, and it cost nothing to learn.
+### Deployment from CI without a stored secret
 
-The template still declares exactly one role assignment, on the Key Vault, and it does nothing — the platform's own grant already covers it. I kept it anyway, with a comment that says so in the first line. It is where the working mechanics live: a deterministic name so redeployment is idempotent, an explicit principal type, no subscription id written down. Deleting it would have been tidier and would have taught the next reader less.
+I fulfilled the previous phase's commitment by asking the same question, but using 
+my own identity instead of the platform's. CI now deploys `main.bicep` 
+authenticating over OIDC. There is no password and no certificate in the repository.
+The method was failing on purpose: I initialized the role using the eight operations 
+recorded in the activity log, allowing the deployment to fail five times; each error 
+message stated what was missing, and it was promptly added. 
 
-So the next thing I build is not another attempt at this. It is the opposite case: a deployment identity for CI, through OIDC and federated credentials — a service principal I create, with a role I assign, at a scope I choose. Same exam objective, and this time least privilege is actually reachable. Holding those two side by side is what I expect to make the difference when a question asks which identity belongs where.
+Two valuable mistakes: one reintroduced an operation I had previously removed; the 
+other was a successful deployment despite a failing test run. 
 
-### Deployment from CI, without a stored secret
+During deployment, the workflow executes four commands that are expected to fail. 
+Initially, one of these commands slipped through without actually being tested due 
+to a misleading exit code and error class. Later, verifying the grant proved tricky: 
+simply withdrawing it triggered a local "no subscriptions found" error rather than 
+an actual access denial. To achieve a true verification, I had to test the raw HTTP 
+requests directly—confirming a 403 status without the grant and a 201 with it—thereby 
+exposing a critical gap that the standard test suite would have missed.
 
-I followed through on the previous phase's promise: same question, but with my own identity in place of the platform's. CI now deploys `main.bicep` authenticating over OIDC. There is no password and no certificate in the repository — they were never created, and I checked that after the deployment had already succeeded.
+### An input source and an execution target
 
-The method was failing on purpose: I seeded the role with the eight operations the activity log had recorded, and let the deployment break five times; each error named what was missing, and I added only that. Two instructive errors: one put back an operation I had removed myself; the other was a successful deployment with a red run. Green does not prove something was deployed; red does not prove it wasn't.
+This feature equipped the workspace with both data and compute: a blob container, a 
+datastore that authenticates as the workspace instead of holding a key, a cluster 
+that scales to zero when idle. All declared in the template, all shipped through CI and 
+the approval gate.
 
-Then an interesting part: four commands that must be refused run inside the workflow on every deploy, and one of those four, the first time, passed without testing anything. Right exit code, right error class, wrong axis. I only saw it by reading the error instead of the green summary — a genuinely useful lesson.
+This run named three missing permissions at once, because validation checks the whole 
+template before submitting any of it, while the earlier failures had only ever surfaced 
+singly, during execution.
 
-The same trap came back a third time, when I wanted to prove the grant is actually doing something. Withdrawing it and redeploying does fail — but it fails with "no subscriptions found". It took three attempts to get a real denial: every `az` command resolves something locally before asking Azure, and every local resolution is a failure. In the end it came out as an HTTP request: 403 without the grant, 201 with it, same request. That is the check 002 would not have passed.
+New measurements refined my understanding, showing that an inactive cluster consumes no 
+vCPU quota; quotas measure actual resource utilization rather than template limits; 
+because quota and cost are separate metrics, tracking one will not accurately predict the 
+other. I looked for the networking resources promised in the design notes, but they 
+weren't there. The grant I got based on them was canceled, and yet everything still 
+worked fine.
 
-### Somewhere to read from, something to run on
+### A successful training run paired with an unresponsive deployment
 
-The workspace existed but could do nothing — no data, no compute. This feature gave it both: a blob container, a datastore that authenticates as the workspace instead of holding a key, a cluster that scales to zero when idle. All declared in the template, all shipped through CI and the approval gate.
+A training job runs on the cluster, reads from the datastore, and MLflow tracks it without 
+any configuration. The model comes back as a versioned artifact, and the batch deployment 
+names that version explicitly. Its predictions matched what was computed locally on all 
+five hundred cases.
 
-Widening the role again corrected an assumption I had carried since the earlier work: that failures arrive one at a time. This run named three missing permissions at once — because validation checks the whole template before submitting any of it, while my earlier failures had only ever surfaced singly, during execution. "One per run" was never a rule. It was a symptom I had mistaken for one.
+However, the endpoint answers nothing. Five invocations resulted in five failures: four 
+crashed during image construction prior to node allocation.
 
-Two refusals then arrived in different costumes: AuthorizationFailed from ARM, UserError from Azure ML's own front end — same meaning, different name, and only one looks like a permissions problem on sight.
+I had tried logging the model in MLflow format specifically so Azure ML would write the 
+scoring script and environment. The environment it synthesises needs a package requiring 
+pyarrow<4, MLflow 3 requires >=4, so no version satisfies both. Consequently, I ended up 
+having to use a custom scoring script, even though the format was designed to spare me from 
+it.
 
-The measurements corrected me further. A cluster at rest consumes no vCPU quota at all; quota counts what is running, not what the template allows — quota and cost, it turns out, are two separate ledgers, and I had been reading one to predict the other. I also went looking for the networking resources the design notes promised. They were never there. The grant I had justified by their existence was withdrawn, and nothing broke.
+I anticipated that the endpoint's identity would require an authorization gran, but endpoint 
+has no identity. Because the model resides on the compute node, the cluster's identity 
+handles the read operations. The underlying mechanism was correct, but the executing actor 
+was mistaken. Furthermore, building that custom environment forced Azure ML create a container 
+registry on its own. I set the template to 'none' on purpose, but now every redeploy tries to 
+remove a registry from Azure that cannot be removed. 
+It gave the project its first cost that doesn't stop (the container registry).
 
-One criterion I could not close — my error, not the deployment's: I asked for cost data the same day, and cost data arrives roughly a day late. A criterion that cannot be checked when the work ends will quietly go unchecked. I scheduled it instead, and wrote the question down.
-
-### A model that trains, and an endpoint that does not answer
-
-This is the feature that failed, and if I could keep only one, it would be this.
-
-What works: a training job runs on the cluster, reads from the datastore, and MLflow tracks it without any configuration of mine. The model comes back as a versioned artifact, and the batch deployment names that version explicitly — never latest. Its predictions matched what I computed locally on all five hundred cases, which was the real success criterion; a run appearing in the portal would have proved nothing.
-
-What doesn't work: the endpoint answers nothing. Five invocations, five causes — four died at image build, before any node was allocated, which is the only reason the sequence was affordable at all.
-
-Two predictions were wrong, and they taught me more than the ones that held.
-
-I had logged the model in MLflow format specifically so Azure ML would write the scoring script and environment for me. It can't: the environment it synthesises needs a package requiring pyarrow<4, MLflow 3 requires >=4, and no version satisfies both. So I ended up with the custom scoring script the format was meant to spare me — and since that environment can't contain MLflow, the model loads from a plain pickle. The format bought nothing at serving time.
-
-The second prediction stings more. I expected the endpoint's identity would need a grant. The endpoint has no identity — the model sits on the compute node, so the cluster's identity does the reading. The mechanism was right; the actor, again, was wrong. Same mistake as the previous feature, twice now.
-
-Then the part nobody planned for: building that custom environment made Azure ML create a container registry on its own, sixty-two seconds after the first call. My template declares none, on purpose — so every redeploy now asks Azure to detach a registry it can't detach. main.bicep no longer deploys, for a reason unrelated to anything I had changed.
-
-It also gave the project its first cost that doesn't stop. Everything before this went to zero when I stopped working; this runs whether I show up or not. I had checked for a registry before starting — there wasn't one. That reading was correct, and correct about a subscription a later step would change. Existence and billing are separate ledgers, I already knew; this feature adds that when you check is part of what you're checking.
-
-My conclusion: this environment should be disposable. A template that can't rebuild what it describes is not a template — and an environment worth leaving running while idle is one I've stopped measuring.
+The conclusion: The environment needs to be torn down and recreated.
 
 ### An environment I can afford to delete
 
-Since the last feature left me with a charge that doesn't stop, I stopped treating the environment as furniture. main.bicep now declares the container registry the platform had been attaching on its own — deployability restored, and the registry now dies with its resource group instead of outliving my attention. Purge protection on the Key Vault is gone too. I had turned it on to learn what an irreversible switch feels like, and now I know: it cannot be turned off, which is exactly why a throwaway environment shouldn't have one. Vaults from the current template purge in minutes, so the cycle can run more than once.
+`main.bicep` now declares the container registry the platform had been attaching on its own. 
+The Key Vault's purge protection can't be disabled either, which is precisely why throwaway 
+environments shouldn't have it. Fast vault purging via the current template enables multiple 
+cycle runs..
 
-Then I actually ran it, having only ever written it down before. The round trip took about twelve and a half minutes — 317 seconds to delete, 386 to rebuild. The gap between that and the wall clock wasn't the resources; it was the CI role. Rebuilding into a group it had never covered costs one approval per missing operation, and a single resource type alone needed three, surfacing one at a time.
-
-Two lines in the runbook turned out to be wrong, and finding out cost nothing but doing it. I had assumed the custom role definition would survive teardown — it doesn't, so a rebuild has to redeploy it first. And I had claimed a deleted workspace keeps its name; no API I could find would confirm that either way, so I withdrew the claim rather than repeat it. An honest "unverified" is worth more than a confident sentence I can't back up.
+When I finally ran the setup end-to-end, the complete round trip took about twelve and a half. 
+The time gap was driven not by infrastructure resources, but by the CI permissions model: 
+redeploying into a previously uncovered resource group triggered sequential approval prompts 
+for every missing operation, requiring three separate approvals just for a single resource type.
 
 ### A comment that had been wrong for two features
 
-Re-reading the work against the documentation instead of against memory turned up a line that had survived two features unchallenged: a comment claiming -1 meant zero failure tolerance, when -1 is in fact the most permissive default there is — wrong on both counts, and never caught because a deployment that never failed could never test a claim about what happens when things fail. I corrected it to 0, labeled it as unverified rather than confirmed, and let three more write-ups join it in docs/exam-notes/ — sweeps, online endpoints, monitoring — each one honest that it is documented, not measured. Monitoring I dropped outright rather than deferred: with no production traffic, it could only compare my own training data against itself and report no drift, a green check proving nothing, the same failure this whole project keeps running into.
+Re-reading the work against the documentation instead of against memory turned up a line that 
+had survived two features unchallenged: a comment claiming -1 meant zero failure tolerance, when 
+-1 is in fact the most permissive default. I corrected it to 0, labeled it as unverified rather 
+than confirmed, and let three more write-ups join it in docs/exam-notes/ (sweeps, online 
+endpoints, monitoring). 
 
-### `genaiops/` — a model, a versioned prompt, and a call 
+NOTE: monitoring has been completely removed, because, with no production traffic, it just 
+benchmarked the training data against itself and reported no drift.
+
+### `genaiops/`: a model, a versioned prompt, and a call 
 
 The generative half starts here, and I kept it deliberately small: one token-billed model, a prompt that lives in git instead of in a portal, a call I can retrieve after the terminal that made it is gone. It sits alone in swedencentral, sharing nothing with the northeurope backbone — either can be destroyed without touching the other. A Foundry account and a project, and no hub: a hub would have pulled in the same storage-vault-registry chain that broke my template two features ago.
 
