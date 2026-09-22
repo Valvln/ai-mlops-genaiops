@@ -116,6 +116,15 @@ def main() -> int:
         # Names this process in the trace, so a record can be attributed to the
         # harness rather than to an anonymous Python.
         resource_attributes={"service.name": "ai300-foundry-block3"},
+        # KEEP THIS. The distro's default sampler since 1.8.6 is
+        # RateLimitedSampler{5.0}, whose percentage starts at 0 and needs ~0.5 s
+        # of process life to reach 100%. This script configures, calls, flushes
+        # and exits, so most of its spans are dropped before the exporter sees
+        # them — and force_flush() still returns true, because a dropped span
+        # was never queued. That is why this script lost spans at the same rate
+        # as block 4's and was wrongly cleared as innocent.
+        # specs/007-genai-eval-observability/findings.md § F6.
+        sampling_ratio=1.0,
     )
     tracer = trace.get_tracer(__name__)
 

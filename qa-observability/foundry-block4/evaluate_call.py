@@ -311,6 +311,23 @@ def main() -> int:
     configure_azure_monitor(
         connection_string=connection_string,
         resource_attributes={"service.name": "ai300-foundry-block4"},
+        # KEEP THIS. Without it the distro installs RateLimitedSampler{5.0} and
+        # DROPS most spans of a short-lived process — silently, before the
+        # exporter runs, so force_flush() still returns true and the ingestion
+        # endpoint still answers "Items accepted". That combination is what made
+        # F6 read as a service-side loss for two days.
+        #
+        # The rate limiter's percentage is derived from an exponentially decayed
+        # window that starts at zero, so it reports 0% at process start and
+        # needs ~0.5 s of process life to reach 100%. A CLI that configures,
+        # works, and exits is exactly the shape it penalises. Measured on this
+        # venv: 1 of 12 spans recorded by default, 12 of 12 with this argument.
+        #
+        # The default changed in azure-monitor-opentelemetry 1.8.6 (2026-02-05)
+        # from ApplicationInsightsSampler at 100%. pyproject pins >=1.6,<2.0,
+        # so this repository picked the change up without a commit.
+        # specs/007-genai-eval-observability/findings.md § F6.
+        sampling_ratio=1.0,
     )
     tracer = trace.get_tracer(__name__)
 
