@@ -953,6 +953,62 @@ retention, so the purge succeeds and the name is free in minutes — **measured 
 list before purging and match the name: the two vaults differ only in a suffix,
 and `ai300kv2mgou37pfmjou` is the one that must be left alone.
 
+### 6.1b The Log Analytics workspace is the second soft-delete trap, and it is silent
+
+**Measured as F6/F8 of feature 007 on 2026-08-23, sourced 2026-09-22.** A
+resource group deletion soft-deletes its Log Analytics workspace for **14 days**.
+Unlike the vault, which fails loudly and forces the purge above, the workspace
+is **restored silently by the next deployment** and reported as a successful
+create. Learn states the mechanism outright:
+
+> «The workspace recovery is performed by **re-creating the Log Analytics
+> workspace with the details of the deleted workspace**, including: Subscription
+> ID, Resource group name, Workspace name, Region.»
+
+A Bicep redeploy into a recreated resource group supplies all four, because
+resource names derive from `uniqueString(resourceGroup().id)` and the group name
+is reused. **The redeploy is the documented recovery operation.** It is not a
+defect, and there is no error to catch — which is why the old data came back
+with four-day-old `genaiops.call` spans still queryable in it.
+
+Delete it permanently, and **the ordering is not optional — purge the workspace
+first, then the group**:
+
+```bash
+az monitor log-analytics workspace delete \
+  -g <rg> -n <law name> --force true --yes     # FIRST, while the group exists
+az group delete -n <rg> --yes                  # then
+```
+
+**The reverse order cannot be recovered from**, measured as feature 008's F10.
+The purge is addressed through the resource group, so once the group is gone the
+path no longer resolves and there is no group-less route to the workspace. Worse,
+`--force true` against a missing group **exits 0 with no output** — the CLI
+swallows the `ResourceGroupNotFound` the REST API returns, so a teardown script
+checking exit codes reports a clean purge that never happened. The residue then
+sits for 30 days and cannot be removed; it does not bill.
+
+Learn's own note assumes the group is still there:
+
+> «If the workspace is in soft-delete state, you must recover the workspace
+> first and permanently delete it then.»
+
+That recovery needs the resource group to exist, and returns 404 without it.
+
+**Assert the create was a create.** `az resource list` cannot tell a recovery
+from a creation; only the timestamp can:
+
+```bash
+az monitor log-analytics workspace show -g <rg> -n <law name> \
+  --query "{created:createdDate, customerId:customerId}" -o table
+```
+
+A `createdDate` older than today means the workspace was recovered, and any
+measurement scoped by resource rather than by time is contaminated with the
+previous cycle's data. Feature 007's invocation counter was exposed to exactly
+this, and escaped only because its `--since` window happened to exclude the old
+rows.
+
 ### 6.2 What survives a teardown
 
 Verified by listing after the deletion, not predicted:
@@ -960,6 +1016,7 @@ Verified by listing after the deletion, not predicted:
 | Object | Survives? |
 | --- | --- |
 | Key Vault, soft-deleted | **yes**, holding its name until purged or expired |
+| Log Analytics workspace, soft-deleted | **yes, and silently** — 14 days, recovered by the next same-name deploy, data included. See § 6.1b |
 | Entra application, service principal, federated credential | **yes** |
 | GitHub environment `azure-deploy` and the four secrets | **yes** |
 | Probe resource group `rg-ai300-probe` | **yes** — probe P2 needs it |
