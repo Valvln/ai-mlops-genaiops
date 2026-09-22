@@ -99,25 +99,42 @@ is worse than no budget check.
 
 ## What is not proven
 
-**Span delivery is unreliable, and it is not this code's fault.** The exporter
-gets HTTP 200 and per-item acceptance; the tracer provider is never replaced;
-no sampling or cap is configured; it reproduces on a workspace minutes old and
-on block 3's unmodified script. Roughly 70% of spans still never appear.
+**Span delivery was unreliable, and it was my dependency's fault after all.**
+For two days I had this filed as a service-side loss: the exporter got HTTP 200
+and per-item acceptance, the tracer provider was never replaced, the component
+reported no sampling and no cap, and it reproduced on a fresh workspace and on
+block 3's untouched script. Every layer I owned came back innocent, so I closed
+it as something Application Insights was doing to me.
 
-So the retrieval of two specific records — the prompt comparison and the
-fixture's verdict — could not be demonstrated, though both evaluations ran
-correctly and repeatedly. `specs/007-genai-eval-observability/findings.md` § F6
-has the full evidence.
+It was not. `configure_azure_monitor()` installs a sampler even when you never
+ask for one, and in `azure-monitor-opentelemetry` 1.8.6 the default became
+`RateLimitedSampler` at 5 traces/second. Its percentage starts at **zero** and
+needs about half a second of process life to reach 100%, so a CLI that
+configures, calls and exits is the worst case it has. The spans were dropped
+before the exporter ever saw them — which is also why `force_flush()` was
+telling the truth. There was nothing queued to flush.
 
-**I am closing this as a known limitation rather than chasing it.** One
-hypothesis is left — a service-driven adaptive sampler, whose configuration the
-SDK is observably fetching — and testing it means redeploying the environment I
-tore down, to learn something about Application Insights' internals that no part
-of this repository can act on and no part of the exam asks about. What I keep
-instead is the rule the loss taught: a flush that returns true, an `HTTP 200`,
-and `Items accepted` are three acknowledgements, and none of them is
-"queryable". A record counts as retrievable when a *separate process reads it
-back*.
+The lesson I actually take is not about sampling. When I checked
+`samplingPercentage: null` on the component I believed I had ruled sampling out.
+That field covers **ingestion** sampling, on the resource. The SDK samples
+first, in my process, and I never looked there. The test was clean and answered
+a question next to the one I was asking. That is the constitution's 1.1.0 rule —
+read the source next to the measurement — catching a finding written before the
+rule existed.
+
+Fixed with `sampling_ratio=1.0` in `evaluate_call.py` and in block 3's
+`call_model.py`, verified offline: 1 span in 12 recorded before, 12 in 12 after.
+`specs/007-genai-eval-observability/findings.md` § F6 has the full trail,
+including the wrong conclusion and the evidence that supported it.
+
+**What is still not proven is the round trip.** The fix is measured against the
+installed package, not against Azure — I tore the environment down and this
+audit created nothing. The retrieval of two specific records (the prompt
+comparison, the fixture's verdict) stays undemonstrated until there is an
+environment to re-run them in. The rule the loss taught still stands, and stands
+better now: a flush returning true, an `HTTP 200` and `Items accepted` are three
+acknowledgements, and none of them is "queryable". A record counts as
+retrievable when a *separate process reads it back*.
 
 **The at-rest cost of an idle day is a prediction, not a measurement, and I want
 that written down rather than rounded off.** Cost Management, read on

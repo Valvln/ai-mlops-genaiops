@@ -10,11 +10,11 @@ sound. That is the point of writing them down separately from `research.md`:
 research recorded what was decided **before** building, and these are what
 building disproved.
 
-**Status, updated 2026-08-25**: F1, F2, F3, F7 and F8 are **fixed and
-verified**. F4 is worked around. F5 is resolved in code. **F6 is closed as a
-known limitation, not fixed** — every layer this repository owns has been
-measured innocent, and the one hypothesis left is service-side. See the section
-at the end of F6.
+**Status, updated 2026-09-22**: F1, F2, F3, F5, F7 and F8 are **fixed and
+verified**. F4 is worked around and is a defect in the SDK, not here. **F6 is
+fixed** — reopened on 2026-09-22 and traced to `RateLimitedSampler`, the default
+sampler `azure-monitor-opentelemetry` adopted in 1.8.6. It was never service-side.
+The fix is one argument in two files; the diagnosis is at the end of F6.
 
 The template fixes were made after the author authorised them ("we'll fix it
 before finishing the block"), and each was proven by deployment rather than by
@@ -28,6 +28,39 @@ before finishing the block"), and each was proven by deployment rather than by
 | `block4-fixed-002` | full chain | Failed — F2 proper: both connections shared a name |
 | `block4-fixed-003` | distinct connection names | **Succeeded** |
 | `block4-fixed-004` | same template, second run | **Succeeded — idempotent** |
+
+---
+
+## Conformance audit against the official documentation — 2026-09-22
+
+These eight findings were measured in August with no source read beside them,
+which is the gap constitution § 1.1.0 was written to close. Each was read
+against Microsoft Learn and the SDK references on 2026-09-22. No Azure resource
+was created; everything below is a documentation read or a local measurement.
+
+| | Finding | What the source says | Verdict |
+| --- | --- | --- | --- |
+| **F1** | account-level deployment race | ARM deploys resources in parallel unless ordered; serialize children of one account with `dependsOn`. The conflict is documented behaviour of a busy parent, not a defect. | **Conformant.** Fix matches prescribed practice. |
+| **F2** | connection not re-deployable | Same-name collision across the account's connection namespace. Not documented for Foundry projects-as-AML-workspaces; the error text names the projection but no page explains it. | **Divergent, source silent.** Fix is right; the silence is a gap worth keeping. |
+| **F3** | `capacity: 1` = 1 request/min | Documented: capacity sets TPM/RPM on a token-billed SKU and is a throttle, not a reservation. | **Conformant.** Template now says 10. |
+| **F4** | `credential` in model config unusable | Learn documents `credential: NotRequired[Any]` as a supported field, "Compatible with azure.core.credentials.TokenCredential". It cannot work: the SDK validates TypedDicts with `isinstance()`, which rejects `Any`. Still reproduces on 1.18.3. | **Defect in the SDK.** Documented field, unusable implementation, misleading error. Workaround stands. |
+| **F5** | default groundedness threshold passes a fabrication | Learn confirms the mechanics exactly: scale 1–5, default threshold 3, "scores at or above the threshold are considered passing". It makes no claim that 3 is right for a gate. | **Conformant, and the finding is about judgement, not conformance.** The default is documented; choosing 5 is ours to justify. |
+| **F6** | eval spans never queryable | **Contradicted by the source.** The distro installs a default sampler; ingestion sampling and SDK sampling are different things with the same name; metrics are never sampled while spans are. | **Was divergent-and-misdiagnosed. Now fixed.** See below. |
+| **F7** | relative path made `prompt_version()` wrong | Git pathspec resolution, not an Azure surface. No documentation involved. | **Ours, fixed.** Out of audit scope. |
+| **F8** | teardown restored the old workspace | **Documented precisely**, and the mechanism explains the silence: recovery «is performed by **re-creating** the Log Analytics workspace with the details of the deleted workspace — Subscription ID, Resource group name, Workspace name, Region». Soft-delete runs 14 days; `--force` deletes permanently. | **Conformant behaviour, divergent runbook.** Not a defect. `infra/DEPLOY.md` documents the Key Vault trap and not this one. |
+
+**Three things this audit changed**, in descending order of consequence:
+
+1. **F6 was wrong and is now fixed** — the one finding where reading the source
+   reversed the conclusion rather than confirming it.
+2. **F8 is reclassified.** It was filed as a trap and as "the prime suspect
+   behind F6". It is neither: it is the documented recovery path, working as
+   specified, and it had nothing to do with F6. What remains real is the runbook
+   gap — a same-name redeploy silently recovers, and `az resource list` cannot
+   tell recovery from creation.
+3. **F4 is confirmed as a source defect**, which is the rarest of the three
+   outcomes and worth citing as such: the documentation describes a field the
+   implementation cannot accept.
 
 ---
 
@@ -226,8 +259,11 @@ things — the score and the threshold — and only the first is the model's.
 
 ## F6 — Evaluation spans are not reaching Log Analytics, and `force_flush` reports success
 
-**Severity**: closed as a known limitation on 2026-08-25 — diagnosed to the
-edge of what this repository controls, and not fixed.
+**Severity**: **fixed on 2026-09-22.** The cause is the SDK's default sampler,
+not Application Insights. Closed as a service-side limitation on 2026-08-25 and
+reopened when the official documentation was finally read against it — the
+sections below are kept in the order they were written, because the wrong
+conclusion and its evidence are the useful part.
 
 Six `genaiops.*` spans were produced. Roughly 40 minutes later, three had
 arrived:
@@ -272,6 +308,12 @@ confirmed one, and cheaper to re-derive wrongly later than to look up here.
 `samplingPercentage: null`, `DailyCap: null`; the workspace reports
 `dailyQuotaGb: -1`.
 
+> **Wrong, and this is the step that cost two days.** Those three values
+> describe **ingestion** sampling, configured on the Azure resource. They say
+> nothing about **SDK** sampling, which runs first, in the process, and is on by
+> default. The test was sound and answered a different question than the one
+> asked. See the 2026-09-22 section.
+
 **3. It is not the code under test.** Five probe processes — no evaluator, no
 model call, just `configure_azure_monitor` → one span → `force_flush` — behave
 identically: `force_flush=True`, nothing arrives. Structurally the same as
@@ -293,6 +335,14 @@ item.** The spans were exported and acknowledged, and then did not appear.
 and the Log Analytics workspace surfacing it as a queryable row. That is
 server-side, and nothing in this repository can fix it. The evidence that it is
 table-specific rather than total:
+
+> **Wrong conclusion, correct evidence.** The gap is upstream of the export, not
+> downstream of it: the lost spans were never sent, so the acknowledged items
+> are a different population from the missing ones. The table split below is
+> real and turns out to be the strongest clue in this document — Learn states
+> that metrics are never sampled while spans are, which is exactly the
+> asymmetry measured here. It was read as evidence of a broken ingestion
+> pipeline rather than of a working sampler.
 
 | Table | Latest row (queried 19:54) |
 | --- | --- |
@@ -333,7 +383,9 @@ way — but it did not touch F6.
   (same object, same four processors, checked at four points), and block 3's
   unmodified `call_model.py` loses spans at the same rate as `evaluate_call.py`.
 - **It is not sampling as configured.** `samplingPercentage: null`,
-  `DailyCap: null`, `dailyQuotaGb: -1`.
+  `DailyCap: null`, `dailyQuotaGb: -1`. — **This line is the error.** It is
+  sampling, as *defaulted*: those fields cover ingestion sampling only, and the
+  SDK's own sampler was never inspected.
 - **It is not the workspace's history.** Reproduced on a workspace minutes old.
 - **It is not another table.** `AppRequests` is empty; the spans are nowhere.
 - **Child spans survive when their parent does not.** In a lost run, the
@@ -345,18 +397,109 @@ way — but it did not touch F6.
   — fine at first, then lossy — is what an adaptive, service-driven sampler
   looks like from the client side, and the SDK is observably fetching
   `AzMonSDKDynamicConfiguration` from the live-metrics endpoint. **Untested**,
-  and named here as the next thing to try, not as a conclusion.
+  and named here as the next thing to try, not as a conclusion. — **Right about
+  the sampler, wrong about where it runs.** It is adaptive and it is in the SDK,
+  not in the service; the live-metrics fetch was a coincidence. Tested on
+  2026-09-22, and this was the answer.
 
-### Closed as a known limitation — 2026-08-25
+### Reopened and fixed — 2026-09-22, by reading the source instead of the service
 
-**Not fixed, and deliberately not pursued further.** One hypothesis is left,
-named above: a service-driven adaptive sampler. Testing it means redeploying the
-environment that was torn down, and the answer would be a statement about
-Application Insights' internal ingestion behaviour — not about anything AI-300
-asks, and not about anything in this repository, which has already been shown
-innocent at every layer it owns.
+**The last hypothesis was right about the mechanism and wrong about the
+address.** There is an adaptive sampler, and it is not service-side. It is in
+this repository's own dependency tree, and it was never searched for because
+`samplingPercentage: null` on the component had been read as "sampling is off".
+That reading is correct about *ingestion* sampling and says nothing about the
+SDK, which samples first and independently.
 
-What this feature keeps instead of a fix is the discipline the loss forced:
+`configure_azure_monitor()` installs a sampler whether or not one is asked for.
+In `azure-monitor-opentelemetry` **1.8.6 (2026-02-05)** the default changed, as
+a documented breaking change:
+
+> «The default sampling behavior has been changed from ApplicationInsightsSampler
+> with 100% sampling (all traces sampled) to **RateLimitedSampler with 5.0 traces
+> per second**.»
+
+Both blocks pin `azure-monitor-opentelemetry>=1.6,<2.0` and both resolve to
+**1.8.9**, so this repository adopted the change without a commit.
+
+**Why a 5-per-second limit drops almost everything in a script that emits one
+span.** `RateLimitedSampler` does not count spans against a fixed window. It
+derives a percentage from an exponentially decayed window
+(`_rate_limited_sampling.py`), and that window **starts at zero**:
+
+```python
+initial_nano_time = int(time.time_ns())
+self._state = _State(0.0, 0.0, initial_nano_time)   # effective_window_nanoseconds = 0
+```
+
+With `effective_window_nanoseconds = 0` the computed probability is 0, so the
+percentage climbs from 0% only as wall-clock time passes, at the hardcoded
+0.1 s adaptation constant. Measured against the installed package:
+
+| Age of the process when the first span is emitted | Sampling percentage |
+| --- | --- |
+| 0 ms | **0.00%** |
+| 10 ms | 5.00% |
+| 100 ms | 50.00% |
+| ≥ 500 ms | 100.00% |
+
+A rate limiter that is *most aggressive at process start* is the exact inverse
+of what the name suggests, and a short-lived CLI is the shape it penalises
+hardest. This is the same class of trap as `genai-tracing.md` § 7 — a
+short-lived process losing spans to machinery designed for long-lived services.
+
+**Every symptom this document recorded is accounted for, including the ones
+that argued against the client:**
+
+| Recorded symptom | What the sampler does |
+| --- | --- |
+| `force_flush()` returns true | A dropped span is **never queued**. Nothing to flush is not a failure to flush. |
+| `HTTP 200`, `Items accepted: 8` | Those eight items are metrics and performance counters, which are never sampled. |
+| `AppMetrics` lands, `AppDependencies` does not | Learn: «**Metrics** are never sampled.» Sampling decisions apply to spans. |
+| Losses not in time order | The decision is `DJB2(trace_id) < percentage` — a function of the trace id, not of arrival order. |
+| Child spans survive a missing parent | `parent_context_sampling()` honours a **recording** parent's rate; a child sampled under a different root is decided separately. |
+| Early spans of a session survive, later ones do not | Each process re-enters the 0% window; whichever span happens to land after ~0.5 s survives. |
+| Reproduced on a workspace minutes old | The sampler is client-side. Workspace age is irrelevant. |
+| Block 3's unmodified `call_model.py` loses at the same rate | Same distro, same range, same 1.8.9, same default. This was read as evidence of a shared *service* cause. It was evidence of a shared *dependency*. |
+
+**Verified offline, at no cost and with no Azure resource.** `configure_azure_monitor()`
+contacts nothing at configure time, so a syntactically valid fake connection
+string exercises the real wiring. Twelve spans emitted back to back:
+
+| Configuration | Sampler installed | Spans recorded |
+| --- | --- | --- |
+| as block 4 shipped | `RateLimitedSampler{5.0}` | **1 / 12** |
+| `OTEL_TRACES_SAMPLER=always_on` | `AlwaysOnSampler` | 12 / 12 |
+| `sampling_ratio=1.0` | `ApplicationInsightsSampler{1.0}` | **12 / 12** |
+
+1 in 12 is the loss rate this document measured against Azure (3 of ~11).
+
+**Fixed in code, not in the environment.** `sampling_ratio=1.0` is passed to
+`configure_azure_monitor()` in both `qa-observability/foundry-block4/evaluate_call.py`
+and `genaiops/foundry-block3/call_model.py`. The environment-variable route
+(`OTEL_TRACES_SAMPLER=always_on`) works identically and was rejected: it lives
+in a shell rather than in the source, so it cannot be reviewed, and
+`azure-monitor-opentelemetry` 1.8.3 shipped a fix for «default value overriding
+user-configured sampling ratio», which is a warning about relying on precedence
+between the two routes.
+
+**Not re-verified against Azure.** The environment is torn down and this session
+created nothing. What is proven is that the sampler drops the spans and that the
+argument stops it, both measured against the installed package. What is not
+proven is a round trip into Log Analytics. T013, T014, T020 and T025 stay
+unverified until an environment exists to run them against — but the reason they
+failed is no longer unknown, and is no longer service-side.
+
+**What this cost, and why.** Two days of diagnosis eliminated the client, the
+evaluation SDK, the workspace history and every other table, and concluded
+"service-side" because every layer *the repository owns* had been cleared. The
+sampler was in none of those layers by that definition, and in all of them by
+any useful one: a transitive default of a pinned dependency. The constitution's
+1.1.0 rule — read the source alongside the measurement — was written after a
+measurement that was sound and whose conclusion was incomplete. This is the same
+failure, found by applying that rule to a finding that predated it.
+
+### What the loss taught before it was fixed, and still teaches
 
 - **A trace store is a dependency, not a given.** Everything downstream of it —
   retrieval, comparison, the invocation counter — inherits its losses.

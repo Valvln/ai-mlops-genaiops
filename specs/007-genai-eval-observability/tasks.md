@@ -300,25 +300,29 @@ everything above exists.
 after the redeploy-and-evaluate session; each task cites its entry in
 [findings.md](./findings.md), where the measurement behind it is recorded.
 
-**⚠️ T031 blocks the feature's own central claim.** SC-002 says an evaluation
-is retrievable after the fact. Right now some are and some are not, so T013,
-T014, T020 and T025 cannot be honestly verified until this is resolved.
+**T031 no longer blocks the feature's central claim, but does not close it
+either.** SC-002 says an evaluation is retrievable after the fact. The reason
+some records were retrievable and some were not is known and fixed in code as of
+2026-09-22; what is missing now is a deployment to re-run T013, T014, T020 and
+T025 against. Diagnosis done, round trip unproven.
 
-- [X] T031 **Closed as a known limitation on 2026-08-25, not fixed.** F6 —
-  `genaiops.eval` spans are missing from Log Analytics while `force_flush()`
-  reports success — is diagnosed as far as this repository can take it, and
-  findings.md § F6 carries the evidence. **The hypothesis this task used to
-  name has been tested and is false**: `azure-ai-evaluation` does *not* replace
-  the global tracer provider (same object, same four span processors, checked
-  at four points), so anyone picking this task up on that text would be chasing
-  something already disproved. Also ruled out by measurement: ingestion lag,
-  configured sampling and caps, the workspace's soft-delete history, the code
-  under test, and the exporter itself — Application Insights answers `HTTP 200`
-  with `Items accepted`. What remains is a **service-side adaptive sampler**,
-  which is untestable from here without a fresh deployment, and whose answer
-  would be internal Azure behaviour of no exam value. Recorded as a limitation
-  in findings.md § F6, `qa-observability/foundry-block4/README.md` and the
-  table below rather than pursued
+- [X] T031 **Fixed on 2026-09-22.** F6 — `genaiops.eval` spans missing from Log
+  Analytics while `force_flush()` reports success — is the distro's **default
+  sampler**, `RateLimitedSampler{5.0}`, adopted in
+  `azure-monitor-opentelemetry` 1.8.6 as a documented breaking change and
+  reached through this repository's `>=1.6,<2.0` pin. Its sampling percentage
+  starts at 0 and needs ~0.5 s of process life to reach 100%, so a short-lived
+  CLI loses most of its spans **before the exporter sees them** — which is why
+  `force_flush()` was honest and why `Items accepted` counted only the metrics,
+  which Learn states are never sampled. Fixed by passing `sampling_ratio=1.0`
+  to `configure_azure_monitor()` in `evaluate_call.py` and in block 3's
+  `call_model.py`. Verified offline against the installed package: 1 span in 12
+  recorded before, 12 in 12 after. **Two earlier conclusions in this task were
+  wrong and are corrected in findings.md § F6**: "configured sampling is ruled
+  out" tested *ingestion* sampling only, and "service-side" was the right shape
+  at the wrong address. Still unverified against Azure — the environment is
+  torn down, so T013, T014, T020 and T025 remain open for want of a
+  deployment, no longer for want of a diagnosis
 - [X] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
   serializes `accounts/projects` against `accounts/connections`, and make the
   connections re-deployable or drop them, having first asked whether they earn
