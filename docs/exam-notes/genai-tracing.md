@@ -1,10 +1,13 @@
 # Tracing a generative AI call — OpenTelemetry, App Insights, and silent losses
 
-**Status: built, and the one thing that nearly shipped broken is not on Learn.**
+**Status: built, and both things that shipped broken were defaults, not code.**
 Feature 006 emitted spans from `call_model.py`, read them back from a separate
 process with `query_trace.py`, and discovered by measurement that a span queued
-in a batch processor is not a span that was exported (§ 7). Everything else below
-comes from the Microsoft Learn pages under *Sources*, read on **2026-08-21**.
+in a batch processor is not a span that was exported (§ 7). Feature 007 then
+lost spans for two days to the SDK's **default sampler** (§ 7b, added
+2026-09-22), which the first version of this note had no section for. Everything
+else below comes from the Microsoft Learn pages under *Sources*, read on
+**2026-08-21**.
 
 This is Domain 4 material that Domain 3 keeps needing. The evaluation half of
 Domain 4 — groundedness, relevance, safety evaluators — is **not** in this note
@@ -254,6 +257,115 @@ after that is missing, not late.
 
 ---
 
+## 7b. Sampling — the default that drops your spans
+
+**Read 2026-09-22, after it cost this repository two days as F6.** This is the
+section that was missing when § 7 was written, and the two failures are cousins:
+both are long-lived-service machinery applied to a short-lived CLI.
+
+### Two samplers, and only one of them is on the Azure resource
+
+| | Where it runs | Default | How it reads when you check it |
+| --- | --- | --- | --- |
+| **SDK sampling** | in your process, at span creation | **on** | invisible from `az`; you must read the SDK |
+| **Ingestion sampling** | Azure, at the ingestion endpoint | off | `samplingPercentage: null` on the component |
+
+Checking the component and finding `samplingPercentage: null` proves only that
+the **second** one is off. This is the exam-shaped trap: the two have the same
+name and different addresses.
+
+> «The Application Insights OpenTelemetry distros include a **default sampler**.
+> The specific sampler and its rate depend on the language and distro version.»
+
+Ingestion sampling is documented as a fallback, «not recommended»: «It drops
+data at the Azure Monitor ingestion point and offers no control over which
+traces and spans are retained.» Use it only when you cannot change the source.
+
+### What is sampled and what is not
+
+> - «Sampling decisions apply to **traces** (spans).»
+> - «**Logs** that belong to unsampled traces are dropped by default.»
+> - «**Metrics** are never sampled.»
+
+That last line is diagnostic gold and is why F6 looked like a broken ingestion
+pipeline: `AppMetrics` kept landing while `AppDependencies` went silent, from
+the same process, over the same connection string, in the same minute. Metrics
+arriving proves the pipe is open. It says nothing about your spans.
+
+### Verifying whether you are being sampled
+
+Learn's own query, which reads the retained percentage out of `itemCount`:
+
+```kusto
+union requests,dependencies,pageViews,browserTimings,exceptions,traces
+| where timestamp > ago(1d)
+| summarize RetainedPercentage = 100/avg(itemCount) by bin(timestamp, 1h), itemType
+```
+
+> «If you see that `RetainedPercentage` for any type is less than 100, then that
+> type of telemetry is being sampled.»
+
+**This is the check F6 never ran**, and it would have answered in one query what
+took two days of elimination. Note it works per `itemType`, so it also shows the
+metrics/dependencies split directly.
+
+### Configuring it
+
+Two routes, and **environment variables take precedence over code**:
+
+```bash
+export OTEL_TRACES_SAMPLER="microsoft.fixed_percentage"   # or microsoft.rate_limited
+export OTEL_TRACES_SAMPLER_ARG=0.1                        # ~10%; or traces/sec
+```
+
+```python
+configure_azure_monitor(connection_string=..., sampling_ratio=1.0)  # keep everything
+```
+
+`always_on` is also accepted as a sampler type. For a study harness or any
+short-lived CLI, **keep 100%**: the volume is a handful of spans, and the whole
+point of the exercise is that every record is retrievable.
+
+### ⚠️ Measured here, and not stated on any Learn page
+
+**`azure-monitor-opentelemetry` 1.8.6 (2026-02-05) changed the Python default**,
+in its changelog rather than in the docs:
+
+> «The default sampling behavior has been changed from ApplicationInsightsSampler
+> with 100% sampling (all traces sampled) to **RateLimitedSampler with 5.0
+> traces per second**.»
+
+"5 traces per second" sounds impossible to hit with one span. It is not, because
+the limiter is adaptive: it derives its percentage from an exponentially decayed
+window that **starts at zero**, with a 0.1 s adaptation constant. Measured
+against 1.8.9:
+
+| Process age at first span | Sampling percentage |
+| --- | --- |
+| 0 ms | **0%** |
+| 100 ms | 50% |
+| ≥ 500 ms | 100% |
+
+**A rate limiter that is harshest at startup is the opposite of what the name
+suggests**, and a CLI that configures, calls and exits lives entirely inside its
+worst case. Twelve spans emitted back to back: 1 recorded by default, 12 with
+`sampling_ratio=1.0`.
+
+The drop happens at span creation, so the span is never queued and never
+exported. **`force_flush()` still returns `True`** — truthfully, because there
+is nothing to flush — and the ingestion endpoint still answers `Items accepted`
+for the telemetry that *was* sent. Three green signals, none of which means your
+span exists. See `specs/007-genai-eval-observability/findings.md` § F6.
+
+Two rules worth carrying:
+
+- **A pinned range is not a pinned behaviour.** `>=1.6,<2.0` accepted a
+  documented breaking change in a default, with no commit in this repository.
+- **Check the SDK's sampler, not just the resource's.** They share a name and
+  answer different questions.
+
+---
+
 ## 8. What this note would cost to verify
 
 **Everything in §§ 2–5 is already spent or free.** The spans, the retrieval and
@@ -279,3 +391,7 @@ rather than read.
 - `foundry-rbac-and-authentication.md` § 1 — why reading a connection is a data action
 - `network-isolation.md` — the outbound story § 6 depends on
 - `genaiops/foundry-block3/call_model.py`, `query_trace.py`, `README.md` — § 7, measured here
+- [Sampling in Azure Application Insights with OpenTelemetry](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-sampling) — read 2026-09-22; § 7b, including "Metrics aren't sampled" and the `RetainedPercentage` query
+- [Configuring OpenTelemetry in Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration#enable-sampling) — read 2026-09-22; the Python sampler environment variables in § 7b
+- [azure-monitor-opentelemetry CHANGELOG, 1.8.6](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/monitor/azure-monitor-opentelemetry/CHANGELOG.md) — read 2026-09-22; the default-sampler breaking change, which is not on any Learn page
+- `specs/007-genai-eval-observability/findings.md` § F6 — § 7b's measurements, and the two days the missing section cost
