@@ -8,8 +8,9 @@ everything here is something I can run, validate, and explain.
 I develop it on a Pay-As-You-Go subscription with the spending limit off. My 
 design decisions are actually protecting against what bills even if stopped. 
 It means:
-* cheapest viable SKU 
-* nothing left running 
+
+* cheapest viable SKU
+* nothing left running
 * as much validated locally as possible before anything touches Azure.
 
 ## How I work
@@ -33,7 +34,7 @@ recurrent are:
 
 ## What is built so far
 
-### `infra/` — Azure baseline (Bicep)
+### `infra/`: Azure baseline (Bicep)
 
 A minimal but opinionated baseline: a Storage Account and a Key Vault.
 
@@ -88,8 +89,7 @@ warning and had passed CI:
 
 - **The storage account name was one character over its limit.** `ai300storage`
   plus a 13-character `uniqueString()` is 25 characters, against a hard cap of
-  24. 
-  Bicep does not validate name length at all.
+  24. Bicep does not validate name length at all.
 - **`managedNetwork` was left to a service default I had never actually seen.**
   I assumed `what-if` would reveal it. It does not: `what-if` renders what the
   template declares, not what the resource provider applies at creation time.
@@ -126,9 +126,9 @@ objective was never to provide a baseline, but to revoke what had been extended
 without request.
 
 Two assumptions fell apart. 
-1. Empty credentials doesn't mean the data stores don't use them, but only that 
-the tool hides them. 
-2. Already-deployed template showed changes on a clean run. 
+1. Empty credentials doesn't mean the data stores don't use them, but only that
+   the tool hides them.
+2. Already-deployed template showed changes on a clean run.
 
 The single best habit to keep is comparing everything to a reference point before 
 believing the output.
@@ -236,27 +236,35 @@ benchmarked the training data against itself and reported no drift.
 
 ### `genaiops/`: a model, a versioned prompt, and a call 
 
-The generative half starts here, and I kept it deliberately small: one token-billed model, a prompt that lives in git instead of in a portal, a call I can retrieve after the terminal that made it is gone. It sits alone in swedencentral, sharing nothing with the northeurope backbone — either can be destroyed without touching the other. A Foundry account and a project, and no hub: a hub would have pulled in the same storage-vault-registry chain that broke my template two features ago.
+The generative component begins here, deliberately kept lean: a single token-billed model, version-controlled prompts residing in Git rather than a cloud portal, and API calls fully 
+recoverable after closing the originating terminal. Isolated within swedencentral with zero 
+overlap with the northeurope backbone, the setup consists strictly of a Foundry account and a 
+project, purposefully omitting a hub to bypass the complex storage-vault-registry dependency 
+chain that previously broke the template.
 
-The permissions were wrong in both directions at once. I expected to need a reader role for traces and nothing to call the model; the subscription said the opposite — Owner carries every control-plane action and no data action, so querying Log Analytics passed on the first try while chat completions came back 401 until I granted a role built for exactly that call. Which plane guards an API, I learned, comes off the refusal, not off how powerful the role sounds. One permission I left refused on purpose: reading the project's own telemetry connection would have meant handing over an entire data plane for a single lookup, a custom role that would outlive the resource group built to leave none — I read the connection string from App Insights instead.
+The permissions were wrong in both directions. The Owner role handles every control-plane 
+action while excluding data actions, allowing Log Analytics queries to succeed immediately 
+while chat completions returned a 401 until a dedicated role was explicitly assigned. API 
+access restrictions depend entirely on the specific denial behavior rather than the apparent 
+scope of a role. To avoid granting excessive permissions, one data-plane access request was intentionally omitted: retrieving the project telemetry connection string would have required 
+granting broad data-plane access for a single lookup, resulting in a custom role outliving the 
+resource group, so the connection string was read directly from App Insights instead.
 
-The defect worth keeping showed up in the tracing, not the permissions: my first version let telemetry ship whatever it had at exit, which for a short CLI means most of it never gets sent. Choosing the model taught the smaller version of the same lesson: the catalog says what a region offers, only the quota API says what I can actually deploy, and the cheaper model I'd picked in advance had a quota of zero. One criterion was still open when I wrote this — the measured cost of an idle day — and leaving the group standing overnight to earn that number wasn't the "never leave anything running" rule being bent, since there's no compute here to bend it against. It came back zero, and the way it came back is the part I kept: an absent row in Cost Management is missing data, not a confirmed zero, and what makes an absence readable is a second resource group known to be billing on the same day.
+The worthwhile defect emerged in tracing, not permissions: the first version sent telemetry on exit, but short-running CLI commands exited too quickly to transmit the data. Choosing the model revealed that the catalog says what a region offers, and only the quota API says what can been actually deploy. Measuring the idle daily cost required leaving the resource group standing overnight, which posed no risk since no active compute was running. The result registered as zero, but in Cost Management an absent row represents missing data rather than a confirmed zero; confirming this required cross-referencing a second resource group known to be billing on the same day.
 
-### `qa-observability/` — judging the answers, and losing the judgements
+### `qa-observability/`: assessing the responses without the bias of judgment
 
-The next question is the one that follows from a retrievable call: not *what did the model say*, but *was it any good*. Evaluation itself went well — an evaluator scoring answers against ground truth, thresholds that fail a run rather than decorate it, and eight findings written down while building. What did not go well is where the judgements ended up. The evaluation spans are accepted with an HTTP 200 and then never appear in Log Analytics, and I closed the feature with that open rather than pretending otherwise: the client, the evaluation SDK, the sampling configuration and every plausible table were eliminated one at a time, and service-side adaptive sampling is the one hypothesis I could not test. Twenty-seven tasks of thirty-four, with the seven left undone named and explained.
+The logical next step from a retrievable call shifts the focus: from *what the model outputted* to *if it was actually useful*. Evaluation execution proceeded smoothly with ground-truth scoring and strict quality thresholds, yielding eight key findings during development. While evaluation spans return an HTTP 200, they fail to populate Log Analytics; after systematically eliminating the client, SDK, sampling configuration, and all potential tables, service-side adaptive sampling remains the most probable unverified cause.
 
-Stopping there was a decision, not an omission. Two of the remaining verifications depend on the missing spans, so finishing them would have meant asserting something I could not observe — and this repository has already shipped two defects that passed a check while missing its point. An honest gap in the write-up costs less than a criterion marked green on faith.
+Two of the remaining verifications depend on the missing spans, so finishing them would have meant asserting something not actually observed.
 
-### `rag-optimization/` — four ways to search, and the margin between them
+### `rag-optimization/`. Four methods and their variance
 
-The last block asks what sits upstream of everything above: how much does retrieval quality actually change with the shape of the query. Eighteen notes cut into 222 chunks, one index, four methods — keyword, vector, hybrid, hybrid with semantic ranking — and 378 relevance labels I assigned by hand, because a measurement of ranking quality made by the thing being ranked is not a measurement. The whole indexing bill was 0,0146 €: the Free tier of AI Search, chosen before the spec froze rather than after the invoice.
+The final section analyzes how retrieval quality varies according to query design, utilizing eighteen notes divided into 222 chunks, a single index and four search methods including keyword, vector, hybrid, and semantic ranking, alongside 378 manually assigned relevance labels. Total indexing costs amounted to 0.0146 euros, leveraging the Free tier of AI Search selected proactively during the design phase.
 
-The documented ordering held at the top and broke in the middle. Semantic ranking won, as Microsoft says it does — but plain vector search beat hybrid, so fusing a keyword leg into a vector query made the ranking *worse* than the vector query alone. The number worth carrying is the margin nobody publishes: **+27 % over keyword, under 4 % over plain vector.** On a corpus this size, the expensive stage buys less than the cheap one.
+The documented ranking order held at the top but failed in the middle. Semantic ranking won, yet plain vector search outperformed hybrid search, meaning adding a keyword component made the overall ranking worse than using vector search alone. The key metric to retain is the **unpublished margin** of a **27 % gain over keyword and under 4 % over plain vector**. Additionally, instances where every method located the correct material without placing it in the top three highlight how isolated metrics create opposing conclusions, requiring both recall and ranking perspectives to capture the actual result.
 
-Two smaller lessons outlived the table. One question had every method find the right material and none of them rank it in the top three — recall alone calls that a success, ranking alone calls it a total failure, and only the pair says what actually happened. And the first version of my scoring script produced four ascending numbers in the expected order, all wrong: it was averaging a composite metric while the seven real ones sat nested a level below. A results table that agrees with the hypothesis is the single most dangerous artifact this project has produced.
-
-This block was also the first built under a rule added to the constitution the same week: read the documentation into `docs/exam-notes/` **before** the plan freezes, so that measuring afterwards either confirms a source or contradicts one. It was adopted because of a measurement — a role that worked and that Microsoft advises against — and it paid for itself here, where two of the findings are precisely the gap between what is published and what I observed.
+This block was also the first built under a rule added to the constitution the same week: read the documentation into `docs/exam-notes/` **before** the plan freezes.
 
 ### `.github/workflows/` — validation and deployment
 
