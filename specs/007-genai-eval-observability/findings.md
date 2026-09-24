@@ -10,11 +10,13 @@ sound. That is the point of writing them down separately from `research.md`:
 research recorded what was decided **before** building, and these are what
 building disproved.
 
-**Status, updated 2026-09-22**: F1, F2, F3, F5, F7 and F8 are **fixed and
+**Status, updated 2026-09-24**: F1, F2, F3, F5, F7 and F8 are **fixed and
 verified**. F4 is worked around and is a defect in the SDK, not here. **F6 is
-fixed** — reopened on 2026-09-22 and traced to `RateLimitedSampler`, the default
-sampler `azure-monitor-opentelemetry` adopted in 1.8.6. It was never service-side.
-The fix is one argument in two files; the diagnosis is at the end of F6.
+fixed and verified against Azure.** It was reopened on 2026-09-22 and traced to
+`RateLimitedSampler`, the default sampler `azure-monitor-opentelemetry` adopted
+in 1.8.6. It was never service-side. The fix is one argument in two files. The
+diagnosis is at the end of F6, and the round trip that verified it on
+2026-09-24 follows it.
 
 The template fixes were made after the author authorised them ("we'll fix it
 before finishing the block"), and each was proven by deployment rather than by
@@ -45,7 +47,7 @@ was created; everything below is a documentation read or a local measurement.
 | **F3** | `capacity: 1` = 1 request/min | Documented: capacity sets TPM/RPM on a token-billed SKU and is a throttle, not a reservation. | **Conformant.** Template now says 10. |
 | **F4** | `credential` in model config unusable | Learn documents `credential: NotRequired[Any]` as a supported field, "Compatible with azure.core.credentials.TokenCredential". It cannot work: the SDK validates TypedDicts with `isinstance()`, which rejects `Any`. Still reproduces on 1.18.3. | **Defect in the SDK.** Documented field, unusable implementation, misleading error. Workaround stands. |
 | **F5** | default groundedness threshold passes a fabrication | Learn confirms the mechanics exactly: scale 1–5, default threshold 3, "scores at or above the threshold are considered passing". It makes no claim that 3 is right for a gate. | **Conformant, and the finding is about judgement, not conformance.** The default is documented; choosing 5 is ours to justify. |
-| **F6** | eval spans never queryable | **Contradicted by the source.** The distro installs a default sampler; ingestion sampling and SDK sampling are different things with the same name; metrics are never sampled while spans are. | **Was divergent-and-misdiagnosed. Now fixed.** See below. |
+| **F6** | eval spans never queryable | **Contradicted by the source.** The distro installs a default sampler; ingestion sampling and SDK sampling are different things with the same name; metrics are never sampled while spans are. | **Was divergent-and-misdiagnosed. Now fixed, and verified against Azure on 2026-09-24.** See below. |
 | **F7** | relative path made `prompt_version()` wrong | Git pathspec resolution, not an Azure surface. No documentation involved. | **Ours, fixed.** Out of audit scope. |
 | **F8** | teardown restored the old workspace | **Documented precisely**, and the mechanism explains the silence: recovery «is performed by **re-creating** the Log Analytics workspace with the details of the deleted workspace — Subscription ID, Resource group name, Workspace name, Region». Soft-delete runs 14 days; `--force` deletes permanently. | **Conformant behaviour, divergent runbook.** Not a defect. `infra/DEPLOY.md` documents the Key Vault trap and not this one. |
 
@@ -259,7 +261,8 @@ things — the score and the threshold — and only the first is the model's.
 
 ## F6 — Evaluation spans are not reaching Log Analytics, and `force_flush` reports success
 
-**Severity**: **fixed on 2026-09-22.** The cause is the SDK's default sampler,
+**Severity**: **fixed on 2026-09-22, verified against Azure on 2026-09-24.**
+The cause is the SDK's default sampler,
 not Application Insights. Closed as a service-side limitation on 2026-08-25 and
 reopened when the official documentation was finally read against it — the
 sections below are kept in the order they were written, because the wrong
@@ -483,7 +486,8 @@ in a shell rather than in the source, so it cannot be reviewed, and
 user-configured sampling ratio», which is a warning about relying on precedence
 between the two routes.
 
-**Not re-verified against Azure.** The environment is torn down and this session
+**Not re-verified against Azure.** (Superseded on 2026-09-24: see "Round trip
+verified" below.) The environment is torn down and this session
 created nothing. What is proven is that the sampler drops the spans and that the
 argument stops it, both measured against the installed package. What is not
 proven is a round trip into Log Analytics. T013, T014, T020 and T025 stay
@@ -498,6 +502,79 @@ any useful one: a transitive default of a pinned dependency. The constitution's
 1.1.0 rule — read the source alongside the measurement — was written after a
 measurement that was sound and whose conclusion was incomplete. This is the same
 failure, found by applying that rule to a finding that predated it.
+
+### Round trip verified against Azure — 2026-09-24
+
+`infra/foundry.bicep` was redeployed into `rg-ai300-foundry` (`swedencentral`)
+on 2026-09-24, unchanged from `4eceed0`. Deployment `ai300-foundry-reverify-001`
+succeeded in 43 s. A second deployment, `-002`, succeeded in 30 s, so the
+template is still idempotent. The workspace reported `createdDate`
+`2026-09-24T06:46:59Z`: it was created, not recovered (F8).
+`azure-monitor-opentelemetry` resolved to 1.8.9, the version that has the
+default sampler.
+
+**Control: the sampler, with and without the fix, on the live service.** A
+probe process configures the distro, emits one span, calls `force_flush()` and
+exits. It makes no model call. It ran 24 times, alternating the two
+configurations. Each process printed the installed sampler, whether its span
+was recording, and the trace id. Arrival was read from `AppDependencies` by
+trace id, 5 minutes later:
+
+| Configuration | Sampler installed | `force_flush()` true | Span recording | Arrived in Log Analytics |
+| --- | --- | --- | --- | --- |
+| distro default | `RateLimitedSampler` | 12 / 12 | 3 / 12 | **3 / 12** |
+| `sampling_ratio=1.0` | `ApplicationInsightsSampler` | 12 / 12 | 12 / 12 | **12 / 12** |
+
+The 3 default-sampler spans that arrived are exactly the 3 that were recording.
+The service dropped nothing. Every loss happened in the process, before export,
+and `force_flush()` returned true for all 24. This is the F6 mechanism measured
+end to end, on the service that reported the original loss.
+
+**The real scripts, with the fix: 8 of 8 arrived.**
+
+| Span | Emitted by | Arrived |
+| --- | --- | --- |
+| `genaiops.call` | 4 runs of `call_model.py` | 4 / 4 |
+| `genaiops.eval` | 4 successful runs of `evaluate_call.py` | 4 / 4 |
+
+Two further `genaiops.eval` spans arrived from runs whose judge call failed.
+They are F9.
+
+**The four tasks F6 blocked, each run as a separate `query_evaluations.py`
+process:**
+
+| Task | Command | Result |
+| --- | --- | --- |
+| T013 | `--trace-id 49b7ae0e…` (scored, relevance) | the joined record: `hello-domain3.prompty @ 38d92d5`, `gpt-4.1-mini`, score 5 against threshold 3, `pass`, reason and response |
+| T014 | `--trace-id 5fdd7bc9…` (never scored) | "No evaluation found … This call has NOT been scored", exit 1. Its `genaiops.call` span is in the store, so the absence is real. |
+| T020 | `--compare 0a989b5… 4b0d037… --metric groundedness` | "No difference: both revisions scored 5.00 on groundedness. The edit did not move this metric." |
+| T025 | `--trace-id 127327dd…` and `--trace-id fixture` | real call: 5 against threshold 5, `pass`. Fixture: 4 against threshold 5, `fail`. |
+
+T020's direction is "no difference". That matches August, when revision 1
+also scored 5.0 (see the prompt's own description). Revision 1 was called from
+a temporary `git worktree` at `0a989b5`, so `prompt.version` recorded a clean
+`0a989b5` and `evaluate_call.py` found the same revision on disk.
+
+`--count-invocations --since 1d` returned 10: 4 calls and 6 judge spans. 8 of
+these reached the model. The counter now over-reports by the 2 failed judge
+attempts (F9). In August it under-reported, 3 counted for about 13 calls.
+
+**Teardown followed 008 F10's order, and it worked.** This was the first
+execution of that rule:
+
+1. `az monitor log-analytics workspace delete --force true --yes` while the
+   group existed. Exit 0. `workspace show` then returned `ResourceNotFound`,
+   and `list-deleted-workspaces` did not list it.
+2. `az group delete -n rg-ai300-foundry --yes`. `az group exists` returned
+   `false`.
+3. `az cognitiveservices account list-deleted` listed
+   `ai300fdrylkcq74thutjeq`. `az cognitiveservices account purge` removed it
+   with the group already gone, because that purge is addressed by location.
+   The list was then empty.
+4. `az role definition list --custom-role-only true` was empty.
+
+The only remaining soft-deleted workspace is `ai300fdrylawqcqpauycu74fk`, from
+`rg-ai300-rag` (008 F10).
 
 ### What the loss taught before it was fixed, and still teaches
 
@@ -515,6 +592,10 @@ Recorded as a limitation in `qa-observability/foundry-block4/README.md`
 promptflow hypothesis this document has since disproved.
 
 ### What it costs this feature
+
+(Written 2026-08-25. On 2026-09-24 T013, T014, T018, T020 and T025 were run
+against a redeployed environment and all passed. See "Round trip verified"
+above.)
 
 - **SC-002 is verified**, but only because a retained eval span was caught:
   `query_evaluations.py --trace-id` returned the joined record — prompt version

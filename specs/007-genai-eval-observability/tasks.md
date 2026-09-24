@@ -128,11 +128,14 @@ confirm the result is retrievable by a query naming that specific call.
 - [X] T013 [US1] In a separate invocation, run `query_evaluations.py
   --trace-id <id>`; confirm it returns the joined record — prompt version,
   deployment, score — read from the trace store, not from anything printed
-  earlier (SC-002, User Story 1 Acceptance Scenario 2)
+  earlier (SC-002, User Story 1 Acceptance Scenario 2). Re-run 2026-09-24
+  with the F6 fix, against a fresh deployment: passed (findings.md § F6,
+  "Round trip verified")
 - [X] T014 [US1] Verify FR-008: run `query_evaluations.py --trace-id` against
   a call that was deliberately never scored; confirm the output states the
   absence in words, distinguishable from a passing or zero score (User Story 1
-  Acceptance Scenario 3)
+  Acceptance Scenario 3). Re-run 2026-09-24: passed, and the unscored call's
+  own `genaiops.call` span was confirmed in the store, so the absence is real
 
 **Checkpoint**: User Story 1 is independently functional — a scored call,
 retrievable after the fact. This is the MVP.
@@ -161,16 +164,19 @@ attributed to their own revision.
 - [X] T017 [US2] Run `call_model.py` (from `genaiops/foundry-block3/`,
   pointed at `grounded-qa.prompty`) once per revision, producing two calls and
   two trace ids
-- [ ] T018 [US2] Run `evaluate_call.py --trace-id` for each of T017's two
-  calls, same `--metric groundedness`, producing two `genaiops.eval` records
+- [X] T018 [US2] Run `evaluate_call.py --trace-id` for each of T017's two
+  calls, same `--metric groundedness`, producing two `genaiops.eval` records.
+  Done 2026-09-24: both revisions scored 5.0 `pass`, and both records arrived
 - [X] T019 [US2] Extend `query_evaluations.py` with `--compare <version-a>
   <version-b> --metric <name>`: retrieve both revisions' records for the named
   metric and state directly which `prompt.version` scored higher
   (contracts/evaluate-and-retrieve.md, SC-004)
-- [ ] T020 [US2] Verify: `git log --follow --oneline --
+- [X] T020 [US2] Verify: `git log --follow --oneline --
   qa-observability/foundry-block4/prompts/grounded-qa.prompty` shows ≥2
   revisions (SC-005), and `query_evaluations.py --compare` states the
-  direction of the difference, not two bare numbers (SC-004)
+  direction of the difference, not two bare numbers (SC-004). Verified
+  2026-09-24: two revisions (`0a989b5`, `4b0d037`). `--compare` stated "No
+  difference: both revisions scored 5.00 on groundedness"
 
 **Checkpoint**: User Stories 1 and 2 both work — a scored call, and a
 comparison across prompt revisions with a stated direction.
@@ -202,9 +208,13 @@ confirm it isn't.
 - [X] T024 [US3] Run `evaluate_call.py --fixture
   fixtures/unsupported_claim.json --metric groundedness`; confirm
   `eval.result` reads `fail` (User Story 3 Acceptance Scenario 2)
-- [ ] T025 [US3] Verify both are retrievable and distinguishable:
+- [X] T025 [US3] Verify both are retrievable and distinguishable:
   `query_evaluations.py --trace-id <the real trace id>` and
-  `query_evaluations.py --trace-id fixture` (SC-003)
+  `query_evaluations.py --trace-id fixture` (SC-003). Verified 2026-09-24:
+  the real call read back 5 against threshold 5, `pass`. The fixture read
+  back 4 against threshold 5, `fail`, labelled as a committed fixture. The
+  fixture query also returned two scoreless rows from failed judge attempts
+  (findings.md § F9)
 
 **Checkpoint**: All three user stories are independently functional. The
 block's Domain 4 trio — a scored call, a prompt comparison, a groundedness
@@ -300,11 +310,12 @@ everything above exists.
 after the redeploy-and-evaluate session; each task cites its entry in
 [findings.md](./findings.md), where the measurement behind it is recorded.
 
-**T031 no longer blocks the feature's central claim, but does not close it
-either.** SC-002 says an evaluation is retrievable after the fact. The reason
-some records were retrievable and some were not is known and fixed in code as of
-2026-09-22; what is missing now is a deployment to re-run T013, T014, T020 and
-T025 against. Diagnosis done, round trip unproven.
+**T031 is closed.** SC-002 says an evaluation is retrievable after the fact.
+The cause of the missing records was fixed in code on 2026-09-22. On
+2026-09-24 a redeployed environment verified the round trip: 8 of 8 real spans
+arrived, and T013, T014, T018, T020 and T025 passed. A default-sampler control
+kept 3 of 12 spans against Azure; the fixed configuration kept 12 of 12
+(findings.md § F6, "Round trip verified").
 
 - [X] T031 **Fixed on 2026-09-22.** F6 — `genaiops.eval` spans missing from Log
   Analytics while `force_flush()` reports success — is the distro's **default
@@ -320,9 +331,9 @@ T025 against. Diagnosis done, round trip unproven.
   recorded before, 12 in 12 after. **Two earlier conclusions in this task were
   wrong and are corrected in findings.md § F6**: "configured sampling is ruled
   out" tested *ingestion* sampling only, and "service-side" was the right shape
-  at the wrong address. Still unverified against Azure — the environment is
-  torn down, so T013, T014, T020 and T025 remain open for want of a
-  deployment, no longer for want of a diagnosis
+  at the wrong address. Verified against Azure on 2026-09-24: 3 of 12 spans
+  arrived with the default sampler, 12 of 12 with `sampling_ratio=1.0`, and
+  8 of 8 from the real scripts
 - [X] T032 Fix F1 and F2 in `infra/foundry.bicep` — add the `dependsOn` that
   serializes `accounts/projects` against `accounts/connections`, and make the
   connections re-deployable or drop them, having first asked whether they earn
@@ -374,6 +385,10 @@ unproven:
 The evaluations themselves ran correctly every time, reproducibly. What is
 unproven is the retrieval of specific records, not the scoring behind them —
 and that distinction is the whole finding.
+
+**Update 2026-09-24.** F6 was a client-side sampler, fixed on 2026-09-22. T018,
+T020 and T025 were verified against a redeployed environment on 2026-09-24.
+T028 and T029 remain open as described above.
 
 ---
 
