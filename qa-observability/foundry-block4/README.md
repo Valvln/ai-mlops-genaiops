@@ -136,6 +136,15 @@ better now: a flush returning true, an `HTTP 200` and `Items accepted` are three
 acknowledgements, and none of them is "queryable". A record counts as
 retrievable when a *separate process reads it back*.
 
+**Verified against Azure, 2026-09-24.** I redeployed the environment and ran 24
+probe processes, alternating the two configurations. With the default sampler,
+3 spans of 12 arrived in Log Analytics, and they were exactly the 3 the process
+had recorded. With `sampling_ratio=1.0`, 12 of 12 arrived. The real scripts
+delivered 8 spans of 8. The prompt comparison and the fixture's `fail` verdict
+were both read back by a separate process. The same run found F9: a judge call
+that fails still exports a span with no score, and the readers count it as an
+evaluation.
+
 **The at-rest cost of an idle day is a prediction, not a measurement, and I want
 that written down rather than rounded off.** Cost Management, read on
 2026-08-25, gives `rg-ai300-foundry` **0.00752 EUR on 2026-08-23** — the only
