@@ -107,8 +107,11 @@ uv run query_evaluations.py --trace-id <some-other-unscored-trace-id>
 ## 4. User Story 3 — groundedness, both directions
 
 ```bash
-# Grounded case — a real call:
-(cd ../../genaiops/foundry-block3 && uv run call_model.py prompts/hello-domain3.prompty)
+# Grounded case: a real call. It must use grounded-qa.prompty, whose sample
+# block carries the `context` groundedness is checked against.
+# hello-domain3.prompty has none, and evaluate_call.py refuses it.
+(cd ../../genaiops/foundry-block3 && \
+  uv run call_model.py ../../qa-observability/foundry-block4/prompts/grounded-qa.prompty)
 uv run evaluate_call.py --trace-id <that trace-id> --metric groundedness
 uv run query_evaluations.py --trace-id <that trace-id>
 # Expect eval.result = pass. (SC-003, pass case)
@@ -126,8 +129,22 @@ uv run query_evaluations.py --trace-id fixture
 git log --follow --oneline -- prompts/grounded-qa.prompty
 # Expect ≥2 commits (SC-005).
 
-# Run both revisions (check out or reference each commit's content when
-# calling), score each with the same metric, then:
+# The latest revision is the working tree: §4's call already covers it.
+#
+# The older revision needs a clean checkout of its commit. Checking the file
+# out in place makes prompt_version() report "<latest>-dirty", and
+# evaluate_call.py refuses to score it. Use a temporary worktree, and copy the
+# current evaluate_call.py into it so the run has the F6 fix:
+git worktree add --detach "$TMPDIR/wt-rev1" <version-a>
+cp evaluate_call.py "$TMPDIR/wt-rev1/qa-observability/foundry-block4/"
+(cd ../../genaiops/foundry-block3 && \
+  uv run call_model.py "$TMPDIR/wt-rev1/qa-observability/foundry-block4/prompts/grounded-qa.prompty")
+(cd "$TMPDIR/wt-rev1/qa-observability/foundry-block4" && \
+  uv run --project "$OLDPWD" python evaluate_call.py \
+    --trace-id <that trace-id> --metric groundedness)
+git worktree remove --force "$TMPDIR/wt-rev1"
+
+# Use full 40-character hashes: prompt.version records the full hash.
 uv run query_evaluations.py --compare <version-a> <version-b> --metric groundedness
 # Expect a stated direction — which revision scored higher — not two bare
 # numbers. (SC-004)
@@ -152,14 +169,26 @@ day (`infra/DEPLOY.md` § 4).
 
 ## 8. Teardown
 
-```bash
-az group delete --name rg-ai300-foundry --yes
-az resource list -g rg-ai300-foundry   # expect empty / not found (SC-007)
+The order is fixed: purge the workspace FIRST, while the group exists
+(`infra/DEPLOY.md` § 6.1b, 008 F10). After `az group delete` there is no route
+to it, and `--force true` against a missing group exits 0 with no output.
 
-# Same blind spot spec 006's quickstart already documented: az resource list
-# cannot see a soft-deleted registry. Check it explicitly, and note the date —
-# it becomes the next feature's own R1 if anything in this folder is rebuilt
-# under the same resource group name within 48 hours.
+```bash
+LAW="$(az resource list -g rg-ai300-foundry \
+  --resource-type Microsoft.OperationalInsights/workspaces --query '[0].name' -o tsv)"
+az monitor log-analytics workspace delete -g rg-ai300-foundry -n "$LAW" --force true --yes
+
+# Do not trust the exit code. Expect ResourceNotFound, then no entry for $LAW:
+az monitor log-analytics workspace show -g rg-ai300-foundry -n "$LAW"
+az monitor log-analytics workspace list-deleted-workspaces -o table
+
+az group delete --name rg-ai300-foundry --yes
+az group exists -n rg-ai300-foundry   # expect false (SC-007)
+
+# az resource list cannot see a soft-deleted account. The purge is addressed by
+# location, so it works after the group is gone. Expect an empty list after it.
 az cognitiveservices account list-deleted -o table
-az role definition list --custom-role-only true -o table
+az cognitiveservices account purge -g rg-ai300-foundry -n <account> -l swedencentral
+az cognitiveservices account list-deleted -o table
+az role definition list --custom-role-only true -o table   # expect empty
 ```
