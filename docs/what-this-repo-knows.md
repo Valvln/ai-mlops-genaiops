@@ -4,7 +4,7 @@ An index, not a note. Everything here is recorded in full somewhere else; this
 page answers one question — **where is the thing we measured, and does it agree
 with the source?** — so that revision does not mean rereading eighteen notes.
 
-Built 2026-09-22 from `docs/exam-notes/` (18 sourced notes), the eight findings
+Built 2026-09-22 from `docs/exam-notes/` (18 sourced notes), the nine findings
 of feature 007 (block 4) and the ten of feature 008 (block 5).
 
 ## How to read the verdict column
@@ -49,6 +49,7 @@ The last two are the ones to reread before an exam. They are marked ⚠️.
 | 18 | **The evaluator's metrics are not where the return value appears to put them.** | [008 F5](../specs/008-rag-retrieval-quality/findings.md) | ⚠️ **contradicts** |
 | 19 | **A record is verified when a separate process reads it back.** Why `evaluate_call.py` and `query_evaluations.py` are two programs. | [007 F6](../specs/007-genai-eval-observability/findings.md), `qa-observability/foundry-block4/README.md` | **extends** |
 | 20 | **One of two control questions was not a control.** A control that does not control is worse than none. | [008 F6](../specs/008-rag-retrieval-quality/findings.md) | ⚠️ **corrects us** — defect in our own spec |
+| 37 | **A failed evaluation is still a record.** The span is written before the judge call, so a judge call that fails is exported with no score and no result. The reader prints it as an evaluation with `score: None`, and the invocation counter counts it. Measured: 10 counted for 8 model invocations. | [007 F9](../specs/007-genai-eval-observability/findings.md) | **extends** |
 
 ## Domain 5 — RAG and retrieval
 

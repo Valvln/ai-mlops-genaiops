@@ -17,6 +17,7 @@ fixed and verified against Azure.** It was reopened on 2026-09-22 and traced to
 in 1.8.6. It was never service-side. The fix is one argument in two files. The
 diagnosis is at the end of F6, and the round trip that verified it on
 2026-09-24 follows it.
+F9 was found during that round trip and is not fixed.
 
 The template fixes were made after the author authorised them ("we'll fix it
 before finishing the block"), and each was proven by deployment rather than by
@@ -679,3 +680,50 @@ resource group was supposedly destroyed.
 `az group delete`, exactly as T001 purges the Foundry account — and T008 should
 assert `createdDate` is today, so a restore can never again be mistaken for a
 create.
+---
+
+## F9 — A failed evaluation is stored as a scoreless record, and the readers treat it as an evaluation
+
+**Severity**: low. No wrong verdict is printed. Found on 2026-09-24, during the
+F6 round trip, the first run in which the evaluation spans arrived reliably.
+
+Two fixture runs of `evaluate_call.py` failed at the judge call with
+`APIConnectionError`. The client never reached the service: the run's
+environment blocked the macOS trust store that `truststore` uses, and the error
+was `OSStatus -26276`. Both spans were still exported. This is by design:
+`evaluate_call.py` sets the span's attributes before the judge call, so a
+failed attempt still records what was attempted. `AppDependencies` holds both
+with `Success = False` and no `eval.score` or `eval.result`.
+
+`query_evaluations.py --trace-id fixture` prints them as evaluations:
+
+```text
+=== 2026-09-24 06:52:41.506085+00:00 eval=479f476d42c654a45de56882dda1eff8
+    evaluated     : a committed fixture (no live call behind it)
+    metric        : groundedness (judge: gpt-4.1-mini)
+    score         : None (threshold None)
+    result        :
+```
+
+The output does not say the judge call failed. `None` differs from a zero, so
+FR-008's distinction holds, but the reader has to infer it.
+
+The same records reach the other two modes:
+
+- `--count-invocations` returned 10 for 8 model invocations. It counts every
+  `genaiops.eval` span, including judge calls that never reached the model. The
+  error is in the conservative direction, the opposite of F6's.
+- `--compare` computes `Runs = count()` and `Result = any(Result)` over all
+  records of a revision. A failed attempt on a compared revision raises
+  `Runs` without adding a score, and `any()` can return its empty result.
+  This was not observed: the two failures were fixture runs, which `--compare`
+  does not select.
+
+**Before F6 was fixed, most of these spans were dropped by the sampler**, like
+every other span of a short-lived process. The August 429s of F3 would have
+produced records like these.
+
+**Fix, not applied**: project `Success` in `eval_projection()`. In
+`--trace-id`, label a record with `Success = false` as a failed evaluation
+attempt with no score. In `--compare` and `--count-invocations`, count only
+records with `Success = true`, or report failed attempts on their own line.
