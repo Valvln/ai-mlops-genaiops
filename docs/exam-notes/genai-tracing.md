@@ -326,14 +326,25 @@ configure_azure_monitor(connection_string=..., sampling_ratio=1.0)  # keep every
 short-lived CLI, **keep 100%**: the volume is a handful of spans, and the whole
 point of the exercise is that every record is retrievable.
 
-### ⚠️ Measured here, and not stated on any Learn page
+### ⚠️ The Python default: documented on Learn, and its startup behaviour measured here
 
-**`azure-monitor-opentelemetry` 1.8.6 (2026-02-05) changed the Python default**,
-in its changelog rather than in the docs:
+**`azure-monitor-opentelemetry` 1.8.6 (2026-02-05) changed the Python default.**
+Learn states it on the Python tab of *Configuring OpenTelemetry in Application
+Insights* (§ Enable sampling):
+
+> «Starting from version 1.8.6, **rate-limited sampling is the default**.»
+> «If you don't set any environment variables or provide either `sampling_ratio`
+> or `traces_per_second`, `configure_azure_monitor()` uses **RateLimitedSampler**
+> by default.»
+
+The package changelog adds the rate, which the Learn page does not give:
 
 > «The default sampling behavior has been changed from ApplicationInsightsSampler
 > with 100% sampling (all traces sampled) to **RateLimitedSampler with 5.0
 > traces per second**.»
+
+Neither source describes the behaviour at process start. That part is measured
+here.
 
 "5 traces per second" sounds impossible to hit with one span. It is not, because
 the limiter is adaptive: it derives its percentage from an exponentially decayed
@@ -392,6 +403,6 @@ rather than read.
 - `network-isolation.md` — the outbound story § 6 depends on
 - `genaiops/foundry-block3/call_model.py`, `query_trace.py`, `README.md` — § 7, measured here
 - [Sampling in Azure Application Insights with OpenTelemetry](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-sampling) — read 2026-09-22; § 7b, including "Metrics aren't sampled" and the `RetainedPercentage` query
-- [Configuring OpenTelemetry in Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration#enable-sampling) — read 2026-09-22; the Python sampler environment variables in § 7b
-- [azure-monitor-opentelemetry CHANGELOG, 1.8.6](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/monitor/azure-monitor-opentelemetry/CHANGELOG.md) — read 2026-09-22; the default-sampler breaking change, which is not on any Learn page
+- [Configuring OpenTelemetry in Application Insights](https://learn.microsoft.com/en-us/azure/azure-monitor/app/opentelemetry-configuration#enable-sampling) — read 2026-09-22; reread 2026-09-25 (ms.date 2026-06-19); the Python sampler environment variables and the Python default in § 7b
+- [azure-monitor-opentelemetry CHANGELOG, 1.8.6](https://github.com/Azure/azure-sdk-for-python/blob/main/sdk/monitor/azure-monitor-opentelemetry/CHANGELOG.md) — read 2026-09-22; the default sampler's rate of 5.0 traces per second, which the Learn page does not give
 - `specs/007-genai-eval-observability/findings.md` § F6 — § 7b's measurements, and the two days the missing section cost
