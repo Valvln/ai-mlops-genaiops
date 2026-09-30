@@ -178,10 +178,12 @@ The LLM-judge evaluators return 1–5, **default pass threshold 3**, and emit a
 ```
 
 Block 4 already measured what this default does: finding F5 recorded that the
-default threshold **promoted a confident fabrication**, because the judge scores
-how the claim is *asserted*, not whether it is *true*. Nothing in the current
-documentation contradicts that measurement — Learn documents the threshold's
-value, not its adequacy.
+default threshold **passed a response with three fabrications**. The judge's
+`reason` named all three. Learn defines groundedness as the *precision* aspect:
+the response contains no content outside the grounding context
+([genai-quality-evaluators.md](genai-quality-evaluators.md)). The judge saw the
+unsupported content and scored it 4, and the threshold of 3 let it pass. Learn
+documents the threshold's value, not its adequacy.
 
 The two facts sit together cleanly, which is what the amended constitution is
 after: the **source** says the default is 3; the **measurement** says 3 admitted
