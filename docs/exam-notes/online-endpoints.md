@@ -114,8 +114,12 @@ Domain 1 question on Key Vault. It is the same shape on a third service.
 
 ### Live traffic
 
-Percentages across deployments must total 100. Traffic is set on the endpoint,
-and only after the deployments exist:
+Percentages across deployments must total **0, which disables live traffic, or
+100**. With 0, every request without a deployment header returns `404`: "The
+endpoint doesn't have any valid deployment with positive weight". A deployment
+with live traffic can't be deleted; set it to 0 first (*Safe rollout* and
+*Troubleshoot online endpoints*, re-read 2026-10-01). Traffic is set on the
+endpoint, and only after the deployments exist:
 
 ```bash
 az ml online-endpoint update --name $ENDPOINT_NAME --traffic "blue=90 green=10"
@@ -220,5 +224,6 @@ the same session, and `infra/DEPLOY.md` § 6 is where that belongs.
 - [Online endpoints for real-time inference](https://learn.microsoft.com/en-us/azure/machine-learning/concept-endpoints-online)
 - [Safe rollout for online endpoints](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-safely-rollout-online-endpoints)
 - [Authenticate clients for online endpoints](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-authenticate-online-endpoint)
+- [Troubleshoot online endpoint deployment and scoring](https://learn.microsoft.com/en-us/azure/machine-learning/how-to-troubleshoot-online-endpoints): read 2026-10-01 (ms.date 2025-10-06); `404` with no positive weight
 - [Managed online endpoints VM SKU list](https://learn.microsoft.com/en-us/azure/machine-learning/reference-managed-online-endpoints-vm-sku-list)
 - `compute-cost-model.md` § 4.3, § 4.5, § 7.5 — every figure quoted above
